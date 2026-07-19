@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+httpx
+pydantic
+gTTS
+Pillow
+cryptography
+python-multipart
+sqlite3-to-mysql
+gradio_client
