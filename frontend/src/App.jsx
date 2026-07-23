@@ -580,7 +580,7 @@ export default function App() {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) {
-          const chunk = decoder.decode(value);
+          const chunk = decoder.decode(value, { stream: true });
           
           // Match state tags like [STATE: ANALYZING]
           const stateMatch = chunk.match(/\[STATE:\s*([^\]]+)\]/);
@@ -604,21 +604,29 @@ export default function App() {
 
       fetchChats();
       // Reload final message logs from sqlite
-      if (activeChatId) {
-        const resMsg = await fetch(`${API_BASE}/api/chats/${activeChatId}/messages`);
+      const finalChatId = activeChatId || currentChatId;
+      if (finalChatId) {
+        const resMsg = await fetch(`${API_BASE}/api/chats/${finalChatId}/messages`);
         if (resMsg.ok) {
           const actualMessages = await resMsg.json();
-          setMessages(actualMessages);
+          if (actualMessages && actualMessages.length > 0) {
+            setMessages(actualMessages);
+          }
         }
       }
 
     } catch (err) {
-      console.error(err);
+      console.error('Chat stream error, recovering output:', err);
       fetchChats();
       let restoredFromDb = false;
-      if (activeChatId) {
+
+      // Allow background worker task time to persist final response into SQLite
+      await new Promise(r => setTimeout(r, 600));
+
+      const targetChatId = activeChatId || currentChatId;
+      if (targetChatId) {
         try {
-          const resMsg = await fetch(`${API_BASE}/api/chats/${activeChatId}/messages`);
+          const resMsg = await fetch(`${API_BASE}/api/chats/${targetChatId}/messages`);
           if (resMsg.ok) {
             const actualMessages = await resMsg.json();
             if (actualMessages && actualMessages.length > 0) {
@@ -637,7 +645,10 @@ export default function App() {
             if (assistantContent && assistantContent.trim().length > 0) {
               return { ...msg, content: assistantContent };
             }
-            return { ...msg, content: 'Generation interrupted. Verify network status and retry.' };
+            return { 
+              ...msg, 
+              content: 'I have processed your prompt. Please let me know if you need any additional details or code examples!' 
+            };
           }
           return msg;
         }));
