@@ -1291,8 +1291,8 @@ export default function App() {
             {/* Mobile Menu Toggle */}
             <button 
               className="icon-action-btn mobile-only"
-              onClick={() => setSidebarOpen(true)}
-              title="Open Menu"
+              onClick={() => setSidebarOpen(prev => !prev)}
+              title="Toggle Menu"
             >
               <Menu size={18} />
             </button>
