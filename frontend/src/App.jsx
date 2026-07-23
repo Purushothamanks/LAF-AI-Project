@@ -1459,7 +1459,7 @@ export default function App() {
                     handleSendMessage();
                   }
                 }}
-                placeholder={attachments.length > 0 ? "Prompt about attached files..." : "Send prompt (Add /search for web queries, upload Excel/text files)..."}
+                placeholder={attachments.length > 0 ? "Prompt about attached files..." : "Message LAF AI..."}
                 className="textarea-field"
                 rows={1}
               />

@@ -66,35 +66,46 @@ body {
   }
 
   .app-layout {
-    flex-direction: column;
-    overflow-x: hidden;
+    position: relative;
+    width: 100vw;
+    width: 100dvw;
     height: 100vh;
     height: 100dvh;
+    overflow: hidden;
   }
   
   .sidebar {
     position: fixed;
     top: 0;
     left: 0;
+    bottom: 0;
     width: 82%;
-    max-width: 310px;
+    max-width: 300px;
     height: 100%;
     height: 100dvh;
     transform: translateX(-100%);
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 1000;
-    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.6);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.7);
+    background-color: var(--bg-sidebar);
   }
   
   .sidebar.open {
     transform: translateX(0);
   }
+
+  .sidebar-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
   
   .sidebar-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(6px);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
     z-index: 999;
     opacity: 0;
     pointer-events: none;
@@ -162,19 +173,39 @@ body {
   
   .chat-input-wrapper {
     max-width: 100%;
-    border-radius: 12px;
-    padding: 6px 10px;
+    border-radius: 14px;
+    padding: 2px 4px;
   }
 
   .chat-textarea-row {
+    display: flex;
+    align-items: flex-end;
     gap: 6px;
-    align-items: center;
+    padding: 6px 6px 6px 12px;
+    min-height: 44px;
   }
 
-  .chat-textarea-row textarea {
-    font-size: 14px;
-    min-height: 36px;
-    padding: 6px 8px;
+  .textarea-field {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    padding: 4px 0;
+    min-height: 28px;
+    line-height: 1.4;
+  }
+
+  .chat-input-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-bottom: 2px;
+  }
+
+  .input-trigger-btn, .submit-chat-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
   }
   
   .welcome-viewport {
@@ -888,41 +919,46 @@ body {
 
 .chat-textarea-row {
   display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
   position: relative;
+  min-height: 48px;
 }
 
 .textarea-field {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-primary);
   font-size: 14.5px;
-  padding: 14px 100px 14px 16px;
+  padding: 6px 0;
   font-family: var(--font-sans);
   resize: none;
-  min-height: 48px;
-  max-height: 180px;
-  line-height: 1.5;
+  min-height: 28px;
+  max-height: 160px;
+  line-height: 1.45;
 }
 
 .chat-input-actions-row {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-bottom: 2px;
 }
 
 .input-trigger-btn {
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
   color: var(--text-secondary);
   cursor: pointer;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -931,12 +967,14 @@ body {
 
 .input-trigger-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .input-trigger-btn.active {
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
   animation: pulse 1.5s infinite;
 }
 
@@ -947,28 +985,31 @@ body {
 }
 
 .submit-chat-btn {
-  background: var(--accent-indigo);
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
   color: white;
   border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .submit-chat-btn:hover:not(:disabled) {
-  background: #4f46e5;
-  transform: scale(1.02);
+  opacity: 0.92;
+  transform: translateY(-1px);
 }
 
 .submit-chat-btn:disabled {
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-muted);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .input-bottom-copyright {
