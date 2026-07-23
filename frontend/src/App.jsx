@@ -74,6 +74,10 @@ export default function App() {
   const [codeItIsAnalyzing, setCodeItIsAnalyzing] = useState(false);
   const [codeItAnalysis, setCodeItAnalysis] = useState(null); // { explanation: string, correctedCode: string }
   const [codeItAppliedToast, setCodeItAppliedToast] = useState(false);
+
+  // Share App Modal state
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   
   // Search and filter sidebar
   const [searchQuery, setSearchQuery] = useState('');
@@ -752,44 +756,32 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const shareChat = async () => {
-    const appUrl = window.location.href;
-    if (messages.length > 0) {
-      let chatContent = `# LAF AI Shared Conversation\n\n`;
-      messages.forEach(msg => {
-        const sender = msg.role === 'user' ? userName : 'LAF AI';
-        chatContent += `### **${sender}** (${new Date(msg.timestamp).toLocaleString()})\n\n${msg.content}\n\n---\n\n`;
-      });
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: 'LAF AI Platform',
-            text: 'Check out this conversation on LAF AI!',
-            url: appUrl,
-          });
-          return;
-        } catch (e) {
-          // Fallback to clipboard if share sheet dismissed or unsupported
-        }
+  const handleCopyAppUrl = () => {
+    const url = window.location.origin || 'http://98.89.32.42';
+    navigator.clipboard.writeText(url);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 3000);
+  };
+
+  const handleNativeShareApp = async () => {
+    const url = window.location.origin || 'http://98.89.32.42';
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'LAF AI Platform',
+          text: 'Experience LAF AI - High performance AI Assistant, Code Compiler & Sandbox!',
+          url: url,
+        });
+      } catch (e) {
+        // Ignored
       }
-      navigator.clipboard.writeText(chatContent);
-      alert("Conversation copied to clipboard! Share it anywhere. 🚀");
     } else {
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: 'LAF AI Platform',
-            text: 'Experience LAF AI - High performance AI Assistant & Sandbox!',
-            url: appUrl,
-          });
-          return;
-        } catch (e) {
-          // Fallback to clipboard if share sheet dismissed
-        }
-      }
-      navigator.clipboard.writeText(appUrl);
-      alert("LAF AI app link copied to clipboard! Share it with your friends. 🚀");
+      handleCopyAppUrl();
     }
+  };
+
+  const shareChat = async () => {
+    setShareModalOpen(true);
   };
 
   const downloadMessage = (msg) => {
@@ -2011,6 +2003,101 @@ export default function App() {
               <Sparkles size={13} style={{ color: 'var(--accent-purple)' }} />
               <span>{codeItIsAnalyzing ? 'Analyzing...' : 'Ask LAF'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Share App & Download Link Modal */}
+      {shareModalOpen && (
+        <div className="professional-modal-backdrop" onClick={() => setShareModalOpen(false)}>
+          <div className="professional-modal" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title-bar">
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-purple)' }}>
+                <Share2 size={18} />
+                <span>Share LAF AI App</span>
+              </h4>
+              <button onClick={() => setShareModalOpen(false)} className="icon-action-btn">
+                <X size={16} style={{ color: 'var(--text-secondary)' }} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ gap: '16px', padding: '20px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                Share this direct download link with anyone. Others can open the web app instantly or install it directly onto their phone or desktop!
+              </p>
+
+              <div className="modal-input-group">
+                <span className="modal-input-label">Shareable Web App Link:</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={window.location.origin || 'http://98.89.32.42'}
+                    className="modal-text-input"
+                    style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12.5px', color: 'var(--accent-indigo)', fontWeight: '600' }}
+                  />
+                  <button
+                    onClick={handleCopyAppUrl}
+                    style={{
+                      background: copiedShareLink ? 'rgba(74, 222, 128, 0.2)' : 'linear-gradient(135deg, var(--accent-indigo), var(--accent-purple))',
+                      color: copiedShareLink ? '#4ade80' : '#fff',
+                      border: copiedShareLink ? '1px solid rgba(74, 222, 128, 0.4)' : 'none',
+                      borderRadius: '6px',
+                      padding: '8px 16px',
+                      fontSize: '12.5px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {copiedShareLink ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copiedShareLink ? 'Copied!' : 'Copy Link'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {navigator.share && (
+                <button
+                  onClick={handleNativeShareApp}
+                  className="code-it-btn-secondary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                >
+                  <Share2 size={15} style={{ color: 'var(--accent-purple)' }} />
+                  <span>Share via Apps (WhatsApp / Mobile)</span>
+                </button>
+              )}
+
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ fontWeight: '700', fontSize: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Download size={14} style={{ color: 'var(--accent-indigo)' }} />
+                  <span>Download & Install App on Any Device:</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  <li><strong>Desktop (Chrome / Edge / Brave)</strong>: Click the install icon in address bar or click Install below.</li>
+                  <li><strong>Mobile (Android / iPhone)</strong>: Open link in browser & tap <strong>"Add to Home Screen"</strong>.</li>
+                </ul>
+
+                {deferredPrompt && (
+                  <button
+                    onClick={handleInstallPWA}
+                    className="code-it-btn-run"
+                    style={{ marginTop: '6px', padding: '8px 14px', fontSize: '12px' }}
+                  >
+                    <Download size={14} />
+                    <span>Install LAF App Now</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={() => setShareModalOpen(false)} className="modal-action-btn primary">
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
