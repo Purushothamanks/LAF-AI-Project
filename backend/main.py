@@ -590,7 +590,7 @@ async def fix_code_endpoint(request: CodeFixRequest):
         gemini_key = os.getenv("GEMINI_API_KEY", "")
         gemini_key = gemini_key.strip().strip('"').strip("'")
         
-        if gemini_key and gemini_key != "your_actual_api_key_here":
+        if gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
             gemini_contents, gemini_system = convert_to_gemini_format(messages, system_prompt)
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
             payload = {
@@ -601,7 +601,7 @@ async def fix_code_endpoint(request: CodeFixRequest):
                 }
             }
             try:
-                async with httpx.AsyncClient(timeout=45.0) as client:
+                async with httpx.AsyncClient(timeout=5.0) as client:
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -2160,15 +2160,12 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     gemini_key = gemini_key.strip().strip('"').strip("'")
     
-    if gemini_key and len(gemini_key) >= 20:
+    if gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
         gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
         candidate_models = [
-            "gemini-flash-lite-latest",
-            "gemini-flash-latest",
-            "gemini-3.5-flash-lite",
-            "gemini-3.1-flash-lite",
-            "gemini-2.0-flash-lite-001",
-            "gemini-2.0-flash"
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash"
         ]
         for gem_model in candidate_models:
             if ollama_active:
@@ -2184,7 +2181,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 }
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(40.0, connect=5.0)) as fast_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as fast_client:
                     async with fast_client.stream("POST", url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
