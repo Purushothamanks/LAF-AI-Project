@@ -101,6 +101,35 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages (chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages (timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chats_device_id ON chats (device_id)")
+        
+        # AI Model Knowledge & Trained Datasets Tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_model_knowledge (
+                id TEXT PRIMARY KEY,
+                model_name TEXT NOT NULL,
+                provider TEXT,
+                family TEXT,
+                category TEXT,
+                description TEXT,
+                capabilities TEXT,
+                context_limit INTEGER,
+                trained_data_snippet TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trained_datasets (
+                id TEXT PRIMARY KEY,
+                dataset_name TEXT NOT NULL,
+                source TEXT,
+                domain TEXT,
+                content TEXT NOT NULL,
+                accuracy_score REAL DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_model_name ON ai_model_knowledge (model_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dataset_domain ON trained_datasets (domain)")
         conn.commit()
 
 def create_chat(title="New Chat", device_id="global") -> str:
@@ -211,12 +240,12 @@ def get_global_memory_context(current_chat_id: str, query_prompt: str = None, li
         import math
         
         with get_db_connection() as conn:
-            # Fetch a larger pool of past messages to run similarity on (e.g. 150 messages)
+            # Fetch a fast pool of recent past messages (15 messages max)
             rows = conn.execute("""
                 SELECT role, content, timestamp FROM messages 
                 WHERE chat_id != ? 
                 ORDER BY timestamp DESC 
-                LIMIT 150
+                LIMIT 15
             """, (current_chat_id,)).fetchall()
             
             all_messages = []
@@ -313,3 +342,73 @@ def get_global_memory_context(current_chat_id: str, query_prompt: str = None, li
     except Exception as e:
         print(f"Memory retrieval failed: {e}")
         return ""
+
+def search_ai_model_knowledge(query_prompt: str, limit: int = 4) -> str:
+    """
+    Searches the ingested trained AI models knowledge base and domain datasets 
+    for relevant grounding context to maximize LAF AI response accuracy.
+    """
+    if not query_prompt:
+        return ""
+        
+    try:
+        query_words = [w.lower() for w in re.findall(r'\b\w{3,}\b', query_prompt)]
+        if not query_words:
+            return ""
+            
+        context_blocks = []
+        with get_db_connection() as conn:
+            # 1. Search Trained Datasets
+            ds_rows = conn.execute("SELECT dataset_name, domain, content FROM trained_datasets").fetchall()
+            matched_ds = []
+            for row in ds_rows:
+                score = sum(1 for w in query_words if w in row["dataset_name"].lower() or w in row["domain"].lower() or w in row["content"].lower())
+                if score > 0:
+                    matched_ds.append((dict(row), score))
+                    
+            matched_ds.sort(key=lambda x: x[1], reverse=True)
+            for ds, s in matched_ds[:limit]:
+                context_blocks.append(
+                    f"[TRAINED DATASET ({ds['domain']})]: {ds['dataset_name']}\n{ds['content'].strip()}"
+                )
+
+            # 2. Search AI Model Knowledge Definitions if model/ai query
+            if any(k in query_prompt.lower() for k in ["model", "ai", "llm", "gpt", "claude", "gemini", "llama", "ollama", "mistral", "qwen", "deepseek", "accuracy"]):
+                mod_rows = conn.execute("SELECT model_name, provider, description, capabilities, trained_data_snippet FROM ai_model_knowledge").fetchall()
+                matched_mods = []
+                for row in mod_rows:
+                    score = sum(1 for w in query_words if w in row["model_name"].lower() or w in row["provider"].lower() or w in row["description"].lower())
+                    if score > 0:
+                        matched_mods.append((dict(row), score))
+                        
+                matched_mods.sort(key=lambda x: x[1], reverse=True)
+                for mod, s in matched_mods[:3]:
+                    context_blocks.append(
+                        f"[AI MODEL TRAINED SPECS]: {mod['model_name']} by {mod['provider']}\n"
+                        f"Capabilities: {mod['capabilities']} | {mod['trained_data_snippet']}"
+                    )
+
+        if context_blocks:
+            return "\n\n[COLLECTED TRAINED AI DATASETS & MODEL KNOWLEDGE]\n" + "\n---\n".join(context_blocks) + "\n[END OF TRAINED DATASET CONTEXT]\n"
+        return ""
+    except Exception as e:
+        print(f"Error searching AI model knowledge: {e}")
+        return ""
+
+def get_model_data_stats() -> dict:
+    """
+    Returns statistics on ingested trained AI models and datasets in LAF storage.
+    """
+    try:
+        with get_db_connection() as conn:
+            model_count = conn.execute("SELECT COUNT(*) FROM ai_model_knowledge").fetchone()[0]
+            dataset_count = conn.execute("SELECT COUNT(*) FROM trained_datasets").fetchone()[0]
+            return {
+                "total_ai_models_ingested": model_count,
+                "total_trained_datasets": dataset_count,
+                "status": "active",
+                "accuracy_engine": "Multi-Model Ensembled Grounding & Semantic Search"
+            }
+    except Exception as e:
+        return {"error": str(e)}
+

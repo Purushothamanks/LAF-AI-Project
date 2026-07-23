@@ -49,18 +49,20 @@ body {
 @media (max-width: 768px) {
   .app-layout {
     flex-direction: column;
+    overflow-x: hidden;
   }
   
   .sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 80%;
+    width: 85%;
     max-width: 320px;
     height: 100%;
     transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1000;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   }
   
   .sidebar.open {
@@ -73,7 +75,8 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
     z-index: 999;
     display: none;
   }
@@ -83,37 +86,73 @@ body {
   }
   
   .main-chat-header {
-    padding: 0 16px;
+    padding: 0 12px;
+    height: 54px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .header-title-section h3 {
+    font-size: 14px;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .header-right-actions {
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
   }
   
   .model-select-dropdown {
-    font-size: 11px;
-    padding: 5px 8px;
+    font-size: 10px;
+    padding: 4px 6px;
+    white-space: nowrap;
   }
   
   .messages-viewport {
-    padding: 16px 16px 100px 16px;
+    padding: 12px 12px 110px 12px;
   }
   
   .floating-input-panel {
-    padding: 12px 16px 20px 16px;
+    padding: 8px 12px 16px 12px;
   }
   
   .chat-input-wrapper {
     max-width: 100%;
+    border-radius: 12px;
+  }
+
+  .chat-textarea-row textarea {
+    font-size: 13px;
+    min-height: 38px;
   }
   
   .welcome-viewport {
-    padding: 16px;
+    padding: 16px 12px;
+  }
+
+  .welcome-heading {
+    font-size: 18px !important;
+    text-align: center;
   }
   
   .chat-bubble-row {
-    gap: 10px;
+    gap: 8px;
     max-width: 100%;
+  }
+
+  .chat-bubble-row.user {
+    justify-content: flex-end;
+  }
+
+  .chat-bubble-row.user .chat-bubble {
+    max-width: 88%;
+  }
+
+  .chat-bubble-row.ai .chat-bubble {
+    max-width: 95%;
   }
   
   .code-it-sidebar {
@@ -122,6 +161,39 @@ body {
     top: 0;
     right: 0;
     height: 100%;
+    z-index: 1050;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .professional-modal {
+    width: 94% !important;
+    margin: 0 12px;
+    padding: 16px !important;
+  }
+
+  /* Prevent code block layout breaking on mobile */
+  pre, code, .code-block-wrapper {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-right-actions span.model-select-dropdown:last-child {
+    display: none; /* Hide static model label on very small screens to save space */
+  }
+
+  .logo-name {
+    font-size: 13px;
+  }
+
+  .input-bottom-copyright {
+    font-size: 10px;
   }
 }
 

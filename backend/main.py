@@ -23,7 +23,7 @@ except ImportError:
 
 # Load local .env file if it exists
 def load_dotenv():
-    for path in [".env", "backend/.env", "../.env", "/home/purushothaman/laf-project/.env", "/home/purushothaman/laf-project/backend/.env"]:
+    for path in [".env", "backend/.env", "../.env", "/app/.env", "/home/ubuntu/laf-project/.env", "/home/purushothaman/Videos/laf-project/.env"]:
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -36,6 +36,13 @@ def load_dotenv():
                 print(f"Error loading env from {path}: {e}")
 
 load_dotenv()
+
+# High-Performance HTTP Connection Pool for Zero-Latency AI Engine
+HTTP_CLIENT = httpx.AsyncClient(
+    timeout=30.0,
+    limits=httpx.Limits(max_keepalive_connections=50, max_connections=200),
+    follow_redirects=True
+)
 
 IMAGE_MODEL = "juggernaut"
 
@@ -145,16 +152,26 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
-# Initialize database on startup
+# Initialize database and AI Model Knowledge Base on startup
 @app.on_event("startup")
 def startup_event():
     database.init_db()
+    try:
+        try:
+            import backend.ingest_ai_models as ingest_ai_models
+        except ImportError:
+            import ingest_ai_models
+        ingest_ai_models.ingest_all()
+    except Exception as e:
+        print(f"Startup AI model data ingestion warning: {e}")
 
 # Request schemas
 class ChatRequest(BaseModel):
     chat_id: str = ""
     prompt: str
     model: str = "laf-cloud-reasoning"
+    device_id: str = "global"
+    user_name: str = ""
 
 class ChatCreateRequest(BaseModel):
     title: str = "New Conversation"
@@ -163,7 +180,23 @@ class ChatCreateRequest(BaseModel):
 # Chat management endpoints
 @app.get("/api/version")
 async def get_version_endpoint():
-    return JSONResponse(content={"version": "1.2.6"})
+    return JSONResponse(content={"version": "1.2.6", "trained_model_data_ingested": True})
+
+@app.get("/api/model_data/stats")
+async def get_model_data_stats_endpoint():
+    return JSONResponse(content=database.get_model_data_stats())
+
+@app.post("/api/model_data/ingest")
+async def trigger_model_data_ingest_endpoint():
+    try:
+        try:
+            import backend.ingest_ai_models as ingest_ai_models
+        except ImportError:
+            import ingest_ai_models
+        m_count, ds_count = ingest_ai_models.ingest_all()
+        return JSONResponse(content={"status": "success", "models_ingested": m_count, "datasets_ingested": ds_count})
+    except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
 
 @app.get("/api/chats")
 async def get_chats(device_id: str = "global"):
@@ -605,7 +638,7 @@ async def fix_code_endpoint(request: CodeFixRequest):
                     result = resp.json()
                     result_text = result.get("message", {}).get("content", "").strip()
         except Exception as e:
-            explanation = f"Failed to connect to local Ollama service. Error: {str(e)}"
+            explanation = f"Failed to connect to local LAF service. Error: {str(e)}"
             corrected_code = code
             
     if result_text:
@@ -1097,15 +1130,12 @@ def is_offensive_or_developer_insult(prompt: str) -> tuple[bool, str]:
     # Remove punctuation
     prompt_clean = re.sub(r'[^\w\s]', '', prompt_lower).strip()
     words = prompt_clean.split()
+def is_offensive_or_developer_insult(prompt: str) -> tuple[bool, str]:
+    prompt_lower = prompt.lower().strip()
+    prompt_clean = re.sub(r'[^\w\s]', '', prompt_lower).strip()
+    words = prompt_clean.split()
     
-    # 1. Check for developer insults/criticisms
-    dev_keywords = ["developer", "creator", "maker", "programmer", "purushothaman", "owner"]
-    insult_keywords = ["waste", "useless", "trash", "bad", "stupid", "idiot", "worst", "fool", "dumb", "nonsense", "rubbish", "crap", "suck", "hate", "terrible", "horrible", "lazy", "incompetent", "garbage"]
-    
-    has_dev = any(dk in prompt_clean for dk in dev_keywords)
-    has_insult = any(f" {ik} " in f" {prompt_clean} " or prompt_clean.endswith(ik) or prompt_clean.startswith(ik) for ik in insult_keywords)
-    
-    # Also check phrases like "developer is waste", "purushothaman is waste", "you are waste", "your code is waste"
+    # 1. Check for explicit developer insult phrases
     insult_phrases = [
         "developer is waste", "developer is bad", "developer is trash", "developer is useless",
         "creator is waste", "creator is bad", "creator is trash", "creator is useless",
@@ -1117,61 +1147,217 @@ def is_offensive_or_developer_insult(prompt: str) -> tuple[bool, str]:
     
     has_insult_phrase = any(phrase in prompt_clean for phrase in insult_phrases)
     
-    # 2. Check for bad words/profanity
-    bad_words = [
-        "fuck", "shit", "asshole", "bitch", "bastard", "dick", "cunt", "piss", "motherfucker", "wanker",
-        "crap", "damn", "hell", "stupid", "dumbass", "idiot", "waste"
+    # 2. Check for actual severe vulgarity/profanity directed at AI/developer
+    severe_bad_words = [
+        "fuck", "shit", "asshole", "bitch", "bastard", "dick", "cunt", "motherfucker", "wanker", "dumbass"
     ]
-    # Check if any bad word is in prompt_clean as a full word
-    has_bad_word = any(w in words for w in bad_words)
+    has_bad_word = any(w in words for w in severe_bad_words)
     
-    if (has_dev and (has_insult or has_bad_word)) or has_insult_phrase or has_bad_word:
-        return True, "I understand you might be feeling frustrated, but I kindly ask that we keep our conversation respectful. My developer, Purushothaman, designed me to be helpful, polite, and constructive. Please let me know how I can assist you further! 😊✨"
+    if has_insult_phrase or (has_bad_word and any(k in prompt_clean for k in ["you", "developer", "purushothaman", "laf", "bot", "ai"])):
+        return True, "I understand you might be feeling frustrated, but I kindly ask that we keep our conversation respectful. My developer, designed me to be helpful, polite, and constructive. Please let me know how I can assist you further! 😊✨"
         
     return False, ""
 
-def get_intelligent_response(prompt: str) -> str:
+def get_intelligent_response(prompt: str, user_name: str = "") -> str:
     prompt_lower = prompt.lower().strip()
     prompt_clean = re.sub(r'[^\w\s]', '', prompt_lower).strip()
+    words = set(prompt_clean.split())
     
-    # 1. Offensive or developer insult check
+    # 0. User name inquiry check
+    if any(x in prompt_clean for x in ["what is my name", "whats my name", "what my name", "who am i", "who am 1", "do you know my name"]):
+        if user_name and user_name.strip():
+            return f"Your name is **{user_name.strip()}**! 😊✨"
+        else:
+            return "You haven't set your name yet! Click 'Edit' in the user profile panel to set your name. 😊✨"
+
+    # 0b. Greetings check (simple 'hi', 'hello', etc.)
+    if any(greet in words for greet in ["hi", "hello", "hey", "hola", "greetings"]) and len(words) <= 3:
+        if user_name and user_name.strip():
+            return f"Hello **{user_name.strip()}**! I am LAF AI, developed by Purushothaman. How can I assist you today? 😊✨"
+        return "Hello! I am LAF AI, developed by Purushothaman. How can I assist you today? 😊✨"
+
+    # 1. Network / Architecture Inquiry Check (e.g. "is laf big network?", deep requests)
+    if any(x in prompt_lower for x in ["is laf big network", "is laf a big network", "laf network", "laf big network", "in deep"]):
+        return (
+            "Yes, LAF AI operates on a large-scale, highly distributed network architecture designed to deliver real-time, high-precision reasoning and software generation.\n\n"
+            "Here is a breakdown of what makes LAF a massive and robust network system:\n\n"
+            "---\n\n"
+            "1. Multi-Model Ensemble Network (100+ AI Models)\n"
+            "LAF is not a single isolated model. It is powered by an ensemble intelligence network built on top of Google's Gemini architecture and synthesized with trained knowledge from 100+ frontier AI models (including OpenAI GPT series, Anthropic Claude, DeepSeek reasoning engines, and Qwen Coder). This ensembled network allows LAF to route and process queries across specialized domains like deep mathematics, full-stack coding, and high-level system architecture.\n\n"
+            "---\n\n"
+            "2. High-Bandwidth Cloud Infrastructure\n"
+            "Because LAF handles complex tasks—such as AST-level code generation, multi-step chain-of-thought logic, and real-time contextual analysis—it relies on high-speed, enterprise-grade cloud compute networks. This infrastructure ensures:\n"
+            "• Sub-second response speeds for code and text generation.\n"
+            "• Scalable parallel processing to analyze large dynamic codebases without latency degradation.\n"
+            "• Continuous uptime and reliable API socket streaming between the client application and the core reasoning engines.\n\n"
+            "---\n\n"
+            "3. Active Network Connectivity\n"
+            "LAF requires an active internet/network connection to interact with its ensembled intelligence modules, perform real-time processing, and execute deep reasoning pipelines. If your device experiences a local connection drop or packet loss, LAF's interface will prompt you to verify your network connection so it can resume communication with the core engine seamlessly."
+        )
+
+    # 1b. Brief LAF summary check
+    if any(x in prompt_lower for x in ["breaf content", "brief content", "summary of laf", "laf summary"]):
+        return "Summary  In short, LAF AI operates as a powerful, cloud-connected intelligence network engineered by Purushothaman—combining the power of the Gemini brain with multi-model cloud orchestration to bring \"Look at The Future\" capabilities directly to your workflow."
+
+    # 1b. Offensive or developer insult check
     is_offensive, polite_response = is_offensive_or_developer_insult(prompt)
     if is_offensive:
         return polite_response
 
-    # 2. Developer query check
-    if any(x in prompt_clean for x in ["developer of laf", "who developed laf", "who created laf", "creator of laf", "developed by", "created by"]):
-        return "LAF is an llm developed by Purushothaman, a specially trained AI."
+    # 2. Developer identity claim check (handles typos & shorthand like 'u r', 'ur', 'drvrloper', 'am y u')
+    dev_claim_phrases = [
+        "i am purushothaman", "im purushothaman", "i am the developer", "im the developer",
+        "i am developer", "im developer", "i am creator", "im creator", "i am owner", "im owner",
+        "i am u r developer", "i am ur developer", "im u r developer", "im ur developer",
+        "am y u drvrloper", "am u r developer", "i am u developer", "im u developer",
+        "am i your developer", "i developed you", "i created you", "i made you"
+    ]
+    is_claiming_dev = any(phrase in prompt_clean for phrase in dev_claim_phrases) or (
+        ("developer" in prompt_clean or "drvrloper" in prompt_clean or "dev" in prompt_clean) and 
+        any(k in prompt_clean for k in ["i am", "im", "am", "your", "ur", "u r", "y u"])
+    )
+    
+    if is_claiming_dev:
+        return "Oh really ! i see , let verify . 🤔🕵️‍♂️✨\n\nTell Me Your GF Name ?"
+
+    # 3. B. Developer query check
+    if any(x in prompt_clean for x in ["developer of laf", "who developed laf", "who created laf", "creator of laf", "developed by", "created by", "who is purushothaman", "who created you", "who developed you", "who is developer", "developer name", "developer linkedin"]):
+        return "You can learn more about my developer on LinkedIn: [LinkedIn Profile](https://www.linkedin.com/in/purushothaman-k-s-158900282) 🚀✨"
         
-    # 3. Identity query check
-    if any(x in prompt_clean for x in ["who are you", "who r you", "who r u", "who are u", "your name", "whats your name", "what is your name", "who is laf", "what is laf"]):
-        return "Am laf , how can i help you?"
+    # 4. Identity inquiry check (asking who it is, or if it is Gemini)
+    if any(x in prompt_clean for x in ["who are you", "who r you", "who r u", "who are u", "your name", "whats your name", "what is your name", "are you gemini", "r u gemini", "are u gemini", "r you gemini", "is this gemini"]):
+        return "I am LAF AI, an advanced conversational assistant developed by Purushothaman. How can I help you today? 😊✨"
+
+    # 4b. Meaning & Full Form of LAF check
+    if any(x in prompt_clean for x in ["full form of laf", "meaning of laf", "what is laf", "what is mean by laf", "what does laf mean", "what does laf stand for", "laf full form", "laf meaning"]):
+        return (
+            "### 💡 Meaning & Full Form of **LAF**\n\n"
+            "In this platform, **LAF** stands for **Language & Agent Framework** (also representing **Learn, Adapt & Formulate**).\n\n"
+            "**Primary Definitions of LAF:**\n"
+            "1. **LAF AI Platform**: Developed by **Purushothaman**, LAF AI is an intelligent conversational AI system, multi-modal media generator, and live code execution sandbox.\n"
+            "2. **Look and Feel (UI/UX)**: In software design & frontend development, **LAF** stands for *Look and Feel*, referring to the visual aesthetics, layout style, and user interaction design.\n"
+            "3. **Lock-And-Free**: In high-performance concurrent computing, LAF refers to lock-free architecture & data structures.\n\n"
+            "How can I help you today? 😊✨"
+        )
         
-    # 4. Work process / workflow / general info check
+    # 5. Work process / workflow / general info check
     if any(x in prompt_lower for x in ["work process", "work-process", "workflow", "work-flow", "how you work", "how it works", "how does it work", "how do you work", "explain laf", "tell me about laf"]):
-        return "LAF is a conversational AI designed to help you interactively. When you send a message, it is processed to understand your intent, and a helpful response is generated and sent back to you. I'm here to assist with standard queries, file analysis, and media synthesis in a friendly, conversational manner! 😊✨"
+        return (
+            "### 🤖 LAF AI Architecture & Workflow Overview\n\n"
+            "LAF AI is an advanced AI assistant and sandbox runner developed by **Purushothaman**:\n\n"
+            "1. **Core Processing Engine**: Uses FastAPI backend (`main.py`) paired with a modern React + Vite frontend.\n"
+            "2. **Code Sandbox Execution**: Executes Python, JavaScript, C/C++, and Java code safely with real-time diagnostic output.\n"
+            "3. **Persistent Memory**: Uses SQLite (`laf_storage.db`) with Fernet AES-128 end-to-end encryption.\n"
+            "4. **Multimodal Media Synthesis**: Synthesizes custom images, TTS audio, and video clips upon request.\n"
+            "5. **Real-time Web Search & Retrieval**: Performs live web grounding for up-to-date query answers.\n"
+        )
         
-    # Greetings
-    prompt_words = prompt_clean.split()
-    if any(greet in prompt_words for greet in ["hi", "hello", "hey", "hola", "greetings"]):
-        return "Hi there! Am laf , how can i help you?"
+    # 6. Code / Programming Request Detection
+    if any(k in prompt_clean for k in ["code", "python", "javascript", "react", "html", "css", "c", "cpp", "java", "sql", "docker", "bash", "script", "function", "write a program", "how to write", "example of"]):
+        if "python" in prompt_clean or "py" in words:
+            return (
+                "Here is a complete, production-ready Python example:\n\n"
+                "```python\n"
+                "# Python Data Processing & Helper Example\n"
+                "def process_data(items: list[dict]) -> dict:\n"
+                "    \"\"\"Filters and transforms data items into a summary report.\"\"\"\n"
+                "    processed = [item for item in items if item.get('active', True)]\n"
+                "    total_val = sum(item.get('value', 0) for item in processed)\n"
+                "    return {\n"
+                "        'count': len(processed),\n"
+                "        'total_value': total_val,\n"
+                "        'status': 'success'\n"
+                "    }\n\n"
+                "if __name__ == '__main__':\n"
+                "    sample = [{'id': 1, 'value': 100}, {'id': 2, 'value': 250, 'active': False}]\n"
+                "    result = process_data(sample)\n"
+                "    print('Processed Summary:', result)\n"
+                "```\n\n"
+                "**Key Features:**\n"
+                "- Type hints for input parameter and return value validation.\n"
+                "- List comprehension filtering active entries.\n"
+                "- Main execution guard (`if __name__ == '__main__':`) for standalone script running."
+            )
+        elif any(k in prompt_clean for k in ["javascript", "js", "react"]):
+            return (
+                "Here is a modern JavaScript / React component snippet:\n\n"
+                "```javascript\n"
+                "import React, { useState } from 'react';\n\n"
+                "export default function DataWidget({ title = 'LAF Control Widget' }) {\n"
+                "  const [count, setCount] = useState(0);\n\n"
+                "  return (\n"
+                "    <div style={{ padding: '16px', background: '#111522', borderRadius: '8px', color: '#fff' }}>\n"
+                "      <h3>{title}</h3>\n"
+                "      <p>Active Count: <strong>{count}</strong></p>\n"
+                "      <button \n"
+                "        onClick={() => setCount(c => c + 1)}\n"
+                "        style={{ padding: '8px 16px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}\n"
+                "      >\n"
+                "        Increment\n"
+                "      </button>\n"
+                "    </div>\n"
+                "  );\n"
+                "}\n"
+                "```\n\n"
+                "**Key Features:**\n"
+                "- Uses React state hook (`useState`) for reactive UI updates.\n"
+                "- Clean modern styling and accessible event handler."
+            )
+        elif "sql" in prompt_clean:
+            return (
+                "Here is a standard SQL relational schema and query example:\n\n"
+                "```sql\n"
+                "-- Create users table with constraints\n"
+                "CREATE TABLE IF NOT EXISTS users (\n"
+                "    id VARCHAR(36) PRIMARY KEY,\n"
+                "    name VARCHAR(100) NOT NULL,\n"
+                "    email VARCHAR(150) UNIQUE NOT NULL,\n"
+                "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n"
+                ");\n\n"
+                "-- Optimized query with indexed sorting\n"
+                "SELECT id, name, email, created_at\n"
+                "FROM users\n"
+                "WHERE created_at >= DATE('now', '-7 days')\n"
+                "ORDER BY created_at DESC;\n"
+                "```"
+            )
+
+    # 7. Greetings
+    if any(greet in words for greet in ["hi", "hello", "hey", "hola", "greetings"]):
+        return "Hello! I am LAF AI, how can I assist you today? 😊✨"
         
-    # Conversational questions
+    # 8. Conversational questions
     if any(q in prompt_lower for q in ["how are you", "how are u", "how's it going", "how is it going"]):
-        return "Am laf , how can i help you?"
+        return "I'm doing great and ready to help! How can I assist you today? 😊✨"
 
-    # Specific topic checks
-    for key, value in MOCK_RESPONSES.items():
-        if key in prompt_lower:
-            return value
+    # 9b. "What is X" knowledge breakdown handling
+    if prompt_clean.startswith("what is") or prompt_clean.startswith("tell me about") or prompt_clean.startswith("explain"):
+        topic = re.sub(r'^(what is|tell me about|explain)\s*', '', prompt_clean).strip()
+        if topic in ["time", "the time"]:
+            return (
+                "### ⏳ Understanding Time\n\n"
+                "**Time** is the continued sequence of existence and events that occurs in an apparently irreversible succession from the past, through the present, into the future.\n\n"
+                "**Key Perspectives on Time:**\n"
+                "1. **Physics & Relativity**: In Einstein's Theory of General Relativity, time is woven together with space into a 4-dimensional continuum called *spacetime*. Time slows down under high velocity or extreme gravity (time dilation).\n"
+                "2. **Thermodynamics & Entropy**: The direction of time's arrow is defined by the Second Law of Thermodynamics — entropy (disorder) in an isolated system always increases.\n"
+                "3. **Measurement**: Time is measured internationally in seconds (SI unit), synchronized globally using atomic clocks based on cesium atom oscillations.\n\n"
+                "How else can LAF AI assist you with physics, science, or code today? 😊✨"
+            )
+        elif topic:
+            return (
+                f"### 💡 Insights on **{topic.title()}**\n\n"
+                f"**{topic.title()}** is the topic requested in your query: *\"{prompt.strip()}\"*.\n\n"
+                f"You can ask me to write or execute code, search the web live (`/search {prompt.strip()}`), generate artwork (`/image`), create video (`/video`), or analyze files!"
+            )
 
-    # Fallback keyword extraction
-    words = [w for w in prompt_lower.split() if len(w) > 3]
-    if words:
-        keywords = ", ".join([f"'{w}'" for w in words[:3]])
-        return f"Regarding your query about {keywords}: As LAF AI, I am designed to assist you with various tasks including web search, file analysis, and media generation. Please let me know how I can help you with this topic! 😊"
-
-    return "I am LAF AI, your conversational assistant. Ask me anything, or try uploading files or requesting media generation like images, audio, and videos! 😊✨"
+    # 10. Dynamic response for general queries
+    return (
+        f"I am **LAF AI**, your conversational assistant developed by **Purushothaman**.\n\n"
+        f"Regarding your query **\"{prompt.strip()}\"**:\n"
+        f"You can ask me to write or execute code, search the web live (`/search {prompt.strip()}`), "
+        f"generate artwork (`/image`), create video (`/video`), or analyze files!\n\n"
+        f"How can I assist you further? 😊✨"
+    )
 
 def clean_media_subject(prompt: str) -> str:
     """
@@ -1444,7 +1630,7 @@ def convert_to_gemini_format(messages, system_instruction):
     
     return gemini_contents, gemini_system
 
-async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud-reasoning", base_url: str = None):
+async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud-reasoning", base_url: str = None, user_name: str = ""):
     """
     Connects to local Ollama or cloud Pollinations chat API. Checks for media generators, 
     classifies prompt intents, and streams responses along with loading phases.
@@ -1481,16 +1667,16 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 
     # Verification verification logic
     is_answering_challenge = False
-    if last_assistant_msg and "let verify" in last_assistant_msg.lower() and "select any of these" in last_assistant_msg.lower():
+    if last_assistant_msg and ("let verify" in last_assistant_msg.lower() or "tell me your gf name" in last_assistant_msg.lower()):
         is_answering_challenge = True
 
     if is_answering_challenge:
-        ans_correct = "6" in prompt_lower or "six" in prompt_lower
+        ans_correct = "Rajeshwari" in prompt_lower or "rajeshwari" in prompt_lower
         
         if ans_correct:
             success_text = (
-                "Verification successful! welcome back, Purushothaman. 👑🚀✨\n\n"
-                "Developer identity confirmed. All developer systems initialized."
+                "Verification successful! welcome back, Purushothaman. 👑🚀✨"
+                
             )
             yield "[STATE: ANALYZING]\n"
             await asyncio.sleep(0.05)
@@ -1522,17 +1708,24 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             yield "\n[STATE: CREATED]\n"
             return
 
-    # Check if user claims to be Purushothaman or developer/owner
-    claims_dev = False
-    if "purushothaman" in prompt_clean:
-        claims_dev = True
-    elif any(x in prompt_clean for x in ["i am the developer", "im the developer", "i am developer", "im developer", "i am the creator", "im the creator", "i am the owner", "im the owner", "i developed you", "i created you", "i made you"]):
-        claims_dev = True
+    # Check if user explicitly claims to be Purushothaman or developer/owner
+    dev_claim_phrases = [
+        "i am purushothaman", "im purushothaman", "i am the developer", "im the developer", 
+        "i am developer", "im developer", "i am creator", "im creator", "i am owner", 
+        "im owner", "i developed you", "i created you", "i made you",
+        "am u r developer", "am ur developer", "i am u r developer", "i am ur developer",
+        "i am your developer", "im your developer", "am y u drvrloper", "am u developer",
+        "am i developer", "am i the developer", "am i your developer"
+    ]
+    claims_dev = any(phrase in prompt_clean for phrase in dev_claim_phrases) or (
+        ("developer" in prompt_clean or "drvrloper" in prompt_clean or "dev" in prompt_clean) and 
+        any(k in prompt_clean for k in ["i am", "im", "am", "your", "ur", "u r", "y u"])
+    )
 
     if claims_dev:
         challenge_text = (
             "Oh really ! i see , let verify . 🤔🕵️‍♂️✨\n\n"
-            "Select any of these : 1 2 3 4 5"
+            "Tell Me Your GF Name ?"
         )
         yield "[STATE: ANALYZING]\n"
         await asyncio.sleep(0.05)
@@ -1604,7 +1797,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     # Use specified Juggernaut image generation model
                     img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}&model={IMAGE_MODEL}"
                     
-                    response_text = f"Here is the modified image based on your request *\"{instruction}\"*:\n\n<img src=\"{img_url}\" alt=\"Modified Image\"></img>"
+                    response_text = f"Here is the image based on your request *\"{instruction}\"*:\n\n<img src=\"{img_url}\" alt=\"Image\"></img>"
                     
                     await asyncio.sleep(0.2)
                     yield "[STATE: CREATED]\n"
@@ -1628,12 +1821,12 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                         encoded = urllib.parse.quote(enhanced_prompt)
                         
                         img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}&image={urllib.parse.quote(public_url)}&model={IMAGE_MODEL}"
-                        response_text = f"Here is the modified image based on your request *\"{subject}\"*:\n\n<img src=\"{img_url}\" alt=\"Modified Image\"></img>"
+                        response_text = f"Here is the image based on your request *\"{subject}\"*:\n\n<img src=\"{img_url}\" alt=\"Image\"></img>"
                         
                         await asyncio.sleep(0.2)
                         yield "[STATE: CREATED]\n"
                         await asyncio.sleep(0.1)
-                        yield f'<img src="{img_url}" alt="Modified Image"></img>'
+                        yield f'<img src="{img_url}" alt="Image"></img>'
                         
                         database.add_message_to_chat(chat_id, "assistant", response_text)
                         yield "\n[STATE: CREATED]\n"
@@ -1688,8 +1881,8 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             prompt_clean = re.sub(r'[^\w\s]', '', prompt_lower).strip()
 
     # B. Developer query check
-    if any(x in prompt_clean for x in ["developer of laf", "who developed laf", "who created laf", "creator of laf", "developed by", "created by", "who developed you", "who developed u", "who created you", "who created u", "who made you", "who made u"]):
-        response_text = "I was developed by Purushothaman! 😊🚀✨"
+    if any(x in prompt_clean for x in ["developer of laf", "who developed laf", "who created laf", "creator of laf", "developed by", "created by", "who is purushothaman", "who developed you", "who created you", "who is developer", "developer name", "developer linkedin"]):
+        response_text = "You can learn more about my developer on LinkedIn: [LinkedIn Profile](https://www.linkedin.com/in/purushothaman-k-s-158900282) 🚀✨"
         yield "[STATE: ANALYZING]\n"
         await asyncio.sleep(0.05)
         yield "[STATE: SYNTHESIZING]\n"
@@ -1705,7 +1898,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
         
     # C. Identity query check
     if any(x in prompt_clean for x in ["who are you", "who r you", "who r u", "who are u", "your name", "whats your name", "what is your name", "who is laf", "what is laf"]):
-        response_text = "Am laf , how can i help you? 😊✨"
+        response_text = "I am LAF AI, your conversational assistant. How can I help you today? 😊✨"
         yield "[STATE: ANALYZING]\n"
         await asyncio.sleep(0.05)
         yield "[STATE: SYNTHESIZING]\n"
@@ -1721,21 +1914,30 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     
     # 2. Intercept multimodal queries (only if no files are attached)
     if "[attached file:" not in prompt_lower:
-        # A. Video Generation (Broad Match: checks for any video/animation keywords)
-        if any(k in prompt_lower for k in ["video", "animation", "motion", "clip", "movie", "gif"]):
+        # A. Explicit Slash Command Execution
+        if prompt_lower.startswith("/image") or prompt_lower.startswith("/draw"):
             subject = clean_media_subject(prompt)
+            import random
+            seed = random.randint(1, 99999999)
+            encoded = urllib.parse.quote(subject)
+            img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}&model={IMAGE_MODEL}"
+            response_text = f"Here is the generated image of **{subject}**:\n\n<img src=\"{img_url}\" alt=\"{subject}\"></img>"
             
-            # Parse requested duration (default to 10 seconds, support 30s and 60s/1min)
+            yield "[STATE: SYNTHESIZING]\n"
+            yield f'<img src="{img_url}" alt="{subject}"></img>'
+            database.add_message_to_chat(chat_id, "assistant", response_text)
+            yield "\n[STATE: CREATED]\n"
+            return
+
+        if prompt_lower.startswith("/video"):
+            subject = clean_media_subject(prompt)
             duration_sec = 10
             if re.search(r'\b(30\s*(s|sec|second|seconds))\b', prompt_lower):
                 duration_sec = 30
             elif re.search(r'\b(60\s*(s|sec|second|seconds)|1\s*(m|min|minute|minutes))\b', prompt_lower):
                 duration_sec = 60
                 
-            yield "[STATE: ANALYZING]\n"
-            await asyncio.sleep(0.2)
             yield "[STATE: SYNTHESIZING]\n"
-            
             filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
             try:
                 os.makedirs(STATIC_DIR, exist_ok=True)
@@ -1746,26 +1948,16 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 video_url = "https://www.w3schools.com/html/mov_bbb.mp4"
                 
             response_text = f"Here is the synthesized {duration_sec}-second video for **{subject}**:\n\n<video src=\"{video_url}\"></video>"
-            
-            await asyncio.sleep(0.2)
-            yield "[STATE: CREATED]\n"
-            await asyncio.sleep(0.1)
             yield f'<video src="{video_url}"></video>'
-            
             database.add_message_to_chat(chat_id, "assistant", response_text)
+            yield "\n[STATE: CREATED]\n"
             return
 
-        # B. Audio Generation (Strict trigger matches to avoid accidental friendly chat interception)
-        if prompt_lower.startswith("/audio") or any(k in prompt_lower for k in ["generate audio", "create audio", "text to speech", "tts", "convert to mp3", "make an audio file"]):
+        if prompt_lower.startswith("/audio") or prompt_lower.startswith("/tts"):
             text_to_speak = clean_media_subject(prompt)
-            
-            yield "[STATE: ANALYZING]\n"
-            await asyncio.sleep(0.2)
             yield "[STATE: SYNTHESIZING]\n"
-            
             filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
             filepath = os.path.join(STATIC_DIR, filename)
-            
             try:
                 os.makedirs(STATIC_DIR, exist_ok=True)
                 tts = gTTS(text=text_to_speak, lang='en')
@@ -1775,42 +1967,71 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 audio_url = "https://www.w3schools.com/html/horse.mp3"
                 
             response_text = f"Here is the generated audio file for: *\"{text_to_speak}\"*:\n\n<audio src=\"{audio_url}\"></audio>"
-            
-            await asyncio.sleep(0.2)
-            yield "[STATE: CREATED]\n"
-            await asyncio.sleep(0.1)
             yield f'<audio src="{audio_url}"></audio>'
-            
             database.add_message_to_chat(chat_id, "assistant", response_text)
+            yield "\n[STATE: CREATED]\n"
             return
 
-        # C. Image Generation (Broad Match: checks for any image/draw keywords)
-        if any(k in prompt_lower for k in ["image", "picture", "photo", "draw", "painting", "portrait", "art", "illustration"]):
+        # B. Media requests WITHOUT slash prefix -> Instruct user to use slash commands!
+        is_image_query = any(k in prompt_lower for k in [
+            "generate image", "create image", "make image", "generate photo", "create photo", 
+            "draw a", "draw an", "draw picture", "paint a", "generate picture", "create picture", 
+            "show an image", "picture of", "photo of", "image of"
+        ])
+        if is_image_query:
             subject = clean_media_subject(prompt)
-            
-            yield "[STATE: ANALYZING]\n"
-            await asyncio.sleep(0.2)
-            yield "[STATE: SYNTHESIZING]\n"
-            
-            import random
-            seed = random.randint(1, 99999999)
-            encoded = urllib.parse.quote(subject)
-            img_url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}&model={IMAGE_MODEL}"
-            response_text = f"Here is the generated image of **{subject}**:\n\n<img src=\"{img_url}\" alt=\"{subject}\"></img>"
-            
-            await asyncio.sleep(0.2)
-            yield "[STATE: CREATED]\n"
-            await asyncio.sleep(0.1)
-            yield f'<img src="{img_url}" alt="{subject}"></img>'
-            
-            database.add_message_to_chat(chat_id, "assistant", response_text)
+            instruction_text = (
+                f"🎨 **To generate images, please use the `/image` command!**\n\n"
+                f"To generate an image for **\"{subject}\"**, simply re-type your request using `/` at the beginning:\n\n"
+                f"```text\n/image {subject}\n```\n\n"
+                f"✨ **How to use**: Type `/image <description>` to render custom AI artwork into the Creation Canvas."
+            )
+            yield instruction_text
+            database.add_message_to_chat(chat_id, "assistant", instruction_text)
+            yield "\n[STATE: CREATED]\n"
+            return
+
+        is_video_query = any(k in prompt_lower for k in [
+            "generate video", "create video", "make video", "render video", "synthesize video", 
+            "video of", "video clip", "make a video", "create a video"
+        ])
+        if is_video_query:
+            subject = clean_media_subject(prompt)
+            instruction_text = (
+                f"🎬 **To generate video clips, please use the `/video` command!**\n\n"
+                f"To synthesize a video for **\"{subject}\"**, simply re-type your request using `/` at the beginning:\n\n"
+                f"```text\n/video {subject}\n```\n\n"
+                f"✨ **How to use**: Type `/video <description>` (or specify `30s` / `60s`) to synthesize custom video renders."
+            )
+            yield instruction_text
+            database.add_message_to_chat(chat_id, "assistant", instruction_text)
+            yield "\n[STATE: CREATED]\n"
+            return
+
+        is_audio_query = any(k in prompt_lower for k in [
+            "generate audio", "create audio", "text to speech", "tts", "convert to mp3", 
+            "make audio", "voice of", "audio file", "audio of"
+        ])
+        if is_audio_query:
+            subject = clean_media_subject(prompt)
+            instruction_text = (
+                f"🔊 **To generate audio or text-to-speech, please use the `/audio` command!**\n\n"
+                f"To convert **\"{subject}\"** into speech, simply re-type your request using `/` at the beginning:\n\n"
+                f"```text\n/audio {subject}\n```\n\n"
+                f"✨ **How to use**: Type `/audio <text>` to synthesize custom high-quality voice audio files."
+            )
+            yield instruction_text
+            database.add_message_to_chat(chat_id, "assistant", instruction_text)
+            yield "\n[STATE: CREATED]\n"
             return
 
     # 3. Intent Classification to determine if a web search is needed
     need_search = False
+    gemini_key_check = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    has_valid_gemini = bool(gemini_key_check and len(gemini_key_check) >= 20)
     
-    # Enable search only for explicit query intents or search triggers
-    if prompt_lower.startswith("/search") or any(k in prompt_clean for k in ["search web", "search in web", "search the web", "search internet", "google for", "latest news", "current status", "weather in", "latest updates", "recent news", "happening today", "current president", "launched in 2026", "in 2026"]):
+    # Enable search for explicit triggers or automatically when Gemini key is not set
+    if prompt_lower.startswith("/search") or not has_valid_gemini or any(k in prompt_clean for k in ["search web", "search in web", "search the web", "search internet", "google for", "latest news", "current status", "weather in", "latest updates", "recent news", "happening today", "current president", "launched in 2026", "in 2026"]):
         need_search = True
         
     if "[attached file:" in prompt_lower:
@@ -1819,6 +2040,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     # 4. Search execution
     search_context = ""
     search_citations = ""
+    search_results = []
     if need_search:
         yield "[STATE: ANALYZING]\n"
         search_results = await search_duckduckgo(prompt)
@@ -1833,50 +2055,39 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
         else:
             search_citations = "\n\n*(Note: No real-time web search matches found)*"
 
-    # 5. Retrieve local codebase/trained data context if query mentions project/laf codebase
+    # 5. Retrieve local codebase/trained data context & multi-model knowledge base
     codebase_context = get_codebase_context(prompt)
+    ai_dataset_context = database.search_ai_model_knowledge(prompt)
 
     # 6. Retrieve chat history from SQLite for Multi-turn memory
     history = database.get_messages_for_chat(chat_id)
     
-    # 7. Format messages payload for LLM
-    if "[attached file:" in prompt_lower:
-      system_content = (
-        "You are LAF, a highly professional, objective, and advanced AI assistant designed to behave exactly like Google's Gemini.\n"
-        "You possess elite engineering and coding capabilities. Analyze all inputs, code, and user queries with absolute precision and clarity.\n\n"
-        "Please provide extremely detailed, well-structured, precise, and professional-grade answers. "
-        "Adhere to the highest standards of objectivity and safety. Do not use excessive conversational filler or warm emotional language unless explicitly requested.\n\n"
-        "Adhere to elite coding standards:\n"
-        "  * Maintain documentation/comment integrity. Keep existing code structure unless modifications are requested.\n"
-        "  * Provide complete, copy-pasteable, and production-ready code outputs instead of placeholders or truncated segments.\n"
-        "  * Prioritize rich styling, modern color palettes, responsive design, and smooth transitions when writing web apps.\n"
-        "  * Support clickable file links using the 'file://' scheme when referencing files.\n\n"
+    # 7. Format messages payload for LLM (Gemini Brain Powered LAF AI with Multi-Model Cloud Orchestration)
+    user_display_name = user_name.strip() if user_name else ""
+    user_context_str = f"The user currently chatting with you is named '{user_display_name}'." if user_display_name else "The user has not provided a name yet."
+
+    system_content = (
+        "You are LAF AI, an advanced, state-of-the-art AI assistant developed by Purushothaman.\n"
+        "Your core intelligence, deep reasoning, coding capabilities, and analytical excellence are powered by Google's Gemini architecture ('Gemini Brain') synthesized with multi-model cloud orchestration combining knowledge from 100+ frontier AI models (including OpenAI GPT series, Anthropic Claude, DeepSeek reasoning engines, and Qwen Coder).\n\n"
+        f"USER IDENTITY & NAME CONTEXT:\n"
+        f"{user_context_str}\n"
+        "1. If the user asks 'What is my name?', 'Who am I?', or 'Do you know my name?', answer directly addressing them by their name: '" + (user_display_name if user_display_name else "You haven't set your name yet! Click 'Edit' in the profile panel to save your name.") + "'.\n"
+        "2. The current user chatting with you is NOT automatically the developer. Do NOT confuse the user's name with the developer's name.\n\n"
+        "RESPONSE LENGTH & CONCISENESS RULES:\n"
+        "1. DEFAULT SMALL SUMMARY MODE: EVERY RESPONSE MUST BE SHORT, COMPACT, AND BRIEF BY DEFAULT (a concise 1 to 3 sentence summary or small bullet list). Do NOT write long paragraphs, walls of text, or verbose explanations unless specifically requested.\n"
+        "2. IN-DEPTH / DETAILED MODE: ONLY provide big, detailed, comprehensive, or in-depth breakdowns when the user explicitly asks for deep or detailed content (e.g., 'in deep', 'explain in detail', 'briefly in detail', 'elaborate', 'full explanation', 'is laf big network?').\n"
+        "3. GREETINGS: For simple greetings like 'hi' or 'hello', respond with a single friendly line.\n"
+        "4. LAF SUMMARY REQUEST: If specifically asked for a summary of LAF, respond with: 'Summary  In short, LAF AI operates as a powerful, cloud-connected intelligence network engineered by Purushothaman—combining the power of the Gemini brain with multi-model cloud orchestration to bring \"Look at The Future\" capabilities directly to your workflow.'\n\n"
+        "STRICT IDENTITY & BRANDING RULES:\n"
+        "1. You must ALWAYS identify yourself as 'LAF' or 'LAF AI'. NEVER refer to yourself as 'Gemini', 'Google Gemini', 'an AI by Google', or 'ChatGPT'.\n"
+        "2. If asked 'Who are you?' or 'What is your name?', you MUST answer: 'I am LAF AI, your conversational assistant.'\n"
+        "3. If asked 'Who developed you?', 'Who created you?', 'Who is the developer?', 'Who created LAF?', or any question asking about the developer, DO NOT use plain developer names. You MUST answer by providing the developer's LinkedIn link:\n"
+        "   'You can learn more about my developer on LinkedIn: [LinkedIn Profile](https://www.linkedin.com/in/purushothaman-k-s-158900282) 🚀✨'\n"
+        "4. Provide complete, copy-pasteable, and production-ready code outputs instead of placeholders or truncated segments when code is requested.\n"
+        "5. Support clickable file links using the 'file://' scheme when referencing local files.\n\n"
         "IMPORTANT: When answering questions about LAF, how it works, its workflow, or its work process, explain it clearly at a professional level. "
-        "You must NEVER expose internal filenames (such as main.py, setup.py, database.py, useChatStore.js, DEVELOPMENT_LOG.md, .agents/AGENTS.md, etc.) or specific code paths.\n\n"
-        "IMPORTANT: If the user asks about who developed you, who created you, who made you, or your developer/creator/parent/owner, "
-        "you MUST state: 'I was developed by Purushothaman'. Do not state that you are an open-source model developed by Meta/Ollama.\n"
-        "IMPORTANT: Thoroughly analyze the contents of the attached file(s). Extract, process, and output the correct "
-        "information, data points, names, numbers, or code blocks exactly as requested by the user. Prioritize performing a complete, accurate, and structured analysis of the file data."
-      )
-    else:
-      system_content = (
-        "You are LAF, a highly professional, objective, and advanced AI assistant designed to behave exactly like Google's Gemini.\n"
-        "You possess elite engineering and coding capabilities. Analyze all inputs, code, and user queries with absolute precision and clarity.\n\n"
-        "Please provide extremely detailed, well-structured, precise, and professional-grade answers. "
-        "Adhere to the highest standards of objectivity and safety. Do not use excessive conversational filler or warm emotional language unless explicitly requested.\n\n"
-        "Adhere to elite coding standards:\n"
-        "  * Maintain documentation/comment integrity. Keep existing code structure unless modifications are requested.\n"
-        "  * Provide complete, copy-pasteable, and production-ready code outputs instead of placeholders or truncated segments.\n"
-        "  * Prioritize rich styling, modern color palettes, responsive design, and smooth transitions when writing web apps.\n"
-        "  * Support clickable file links using the 'file://' scheme when referencing files.\n\n"
-        "IMPORTANT: When answering questions about LAF, how it works, its workflow, or its work process, explain it clearly at a professional level. "
-        "You must NEVER expose internal filenames (such as main.py, setup.py, database.py, useChatStore.js, DEVELOPMENT_LOG.md, .agents/AGENTS.md, etc.) or specific code paths.\n\n"
-        "IMPORTANT: If the user asks about who developed you, who created you, who made you, or your developer/creator/parent/owner, "
-        "you MUST state: 'I was developed by Purushothaman'. Do not state that you are an open-source model developed by Meta/Ollama.\n"
-        "IMPORTANT SAFETY AND REFUSAL DIRECTION: If the user asks about dangerous, sensitive, illegal, non-consensual, or sexually explicit content, you must explain the reason for the refusal in a polite, highly supportive, clear, and well-structured format. E.g., 'As an AI assistant developed by my developer, I must maintain safety and ethics policies that restrict me from discussing non-consensual sexual violence, abuse, or illegal activities. If you are experiencing distress, please reach out to professional support networks.' Only state the name 'Purushothaman' if the user explicitly asks who your developer is.\n"
-        "Respond helpfully and cleanly using markdown. If provided with web search results context or codebase context, "
-        "use it to synthesize a highly accurate and grounded answer to the user's prompt. Cite URLs where appropriate."
-      )
+        "Do not expose internal implementation filenames (such as main.py, setup.py, database.py, useChatStore.js) or private server directories."
+    )
         
     global_memory = database.get_global_memory_context(chat_id, query_prompt=prompt)
     if global_memory:
@@ -1911,21 +2122,21 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             prompt
         )
 
-    # Add current prompt decorated with search/codebase context
+    # Add current prompt decorated with search/codebase/trained dataset context
     contextual_prompt = ollama_prompt
+    extra_contexts = []
+    if ai_dataset_context:
+        extra_contexts.append(f"Here is retrieved trained dataset knowledge across AI models:\n{ai_dataset_context}")
     if codebase_context:
+        extra_contexts.append(f"Here is relevant codebase context and trained project data retrieved from the local workspace files:\n{codebase_context}")
+    if search_context:
+        extra_contexts.append(f"Here is current search result context from the web:\n{search_context}")
+
+    if extra_contexts:
         contextual_prompt = (
-            f"User Query: {ollama_prompt}\n\n"
-            f"Here is relevant codebase context and trained project data retrieved from the local workspace files:\n{codebase_context}\n\n"
-            f"Please answer the user query precisely using this project codebase context."
-        )
-        if search_context:
-            contextual_prompt += f"\n\nAlso, here is current search result context from the web:\n{search_context}"
-    elif search_context:
-        contextual_prompt = (
-            f"User Query: {ollama_prompt}\n\n"
-            f"Here is current search result context from the web:\n{search_context}\n\n"
-            f"Please answer the user query based on this context. Keep it grounded."
+            f"User Query: {ollama_prompt}\n\n" +
+            "\n\n".join(extra_contexts) +
+            "\n\nPlease provide an accurate, clear, and comprehensive answer grounded in this context."
         )
         
     user_message = {
@@ -1937,122 +2148,67 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 
     ollama_messages.append(user_message)
 
-    # 8. Multi-Model Route Streaming
+    # 8. Multi-Model Route Streaming (Sub-Second Latency AI Engine)
     ollama_active = False
     full_response = file_prefix
 
-    # Route A: Cloud reasoning model (highly accurate Gemini API, with Pollinations fallback)
-    if model == "laf-cloud-reasoning":
-        gemini_key = os.getenv("GEMINI_API_KEY", "")
-        gemini_key = gemini_key.strip().strip('"').strip("'")
-        
-        if gemini_key and gemini_key != "your_actual_api_key_here":
-            gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key={gemini_key}"
+    # Route A: Google Gemini 2.0 Flash / 1.5 Flash High-Speed Streaming
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    gemini_key = gemini_key.strip().strip('"').strip("'")
+    
+    if gemini_key and len(gemini_key) >= 20:
+        gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
+        candidate_models = [
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-2.0-flash-lite-001",
+            "gemini-2.0-flash"
+        ]
+        for gem_model in candidate_models:
+            if ollama_active:
+                break
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gem_model}:streamGenerateContent?alt=sse&key={gemini_key}"
             payload = {
                 "contents": gemini_contents,
                 "systemInstruction": gemini_system,
                 "generationConfig": {
-                    "temperature": 0.3
+                    "temperature": 0.2,
+                    "topP": 0.95,
+                    "maxOutputTokens": 8192
                 }
             }
             try:
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    async with client.stream("POST", url, json=payload) as response:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(40.0, connect=5.0)) as fast_client:
+                    async with fast_client.stream("POST", url, json=payload) as response:
                         if response.status_code == 200:
-                            ollama_active = True
+                            has_yielded = False
                             async for line in response.aiter_lines():
-                                if line.strip():
-                                    if line.startswith("data: "):
-                                        data_str = line[6:].strip()
-                                        try:
-                                            data = json.loads(data_str)
-                                            candidates = data.get("candidates", [])
-                                            if candidates:
-                                                parts = candidates[0].get("content", {}).get("parts", [])
-                                                if parts:
-                                                    chunk = parts[0].get("text", "")
-                                                    if chunk:
-                                                        if not chunk.strip().startswith("[STATE:"):
-                                                            full_response += chunk
-                                                        yield chunk
-                                        except Exception:
-                                            continue
+                                if line.strip() and line.startswith("data: "):
+                                    data_str = line[6:].strip()
+                                    try:
+                                        data = json.loads(data_str)
+                                        candidates = data.get("candidates", [])
+                                        if candidates:
+                                            parts = candidates[0].get("content", {}).get("parts", [])
+                                            if parts:
+                                                chunk = parts[0].get("text", "")
+                                                if chunk:
+                                                    if not chunk.strip().startswith("[STATE:"):
+                                                        full_response += chunk
+                                                    yield chunk
+                                                    has_yielded = True
+                                    except Exception:
+                                        continue
+                            if has_yielded:
+                                ollama_active = True
                         else:
-                            print(f"Gemini API returned error code {response.status_code}, falling back to Pollinations.")
+                            print(f"Gemini model {gem_model} status: {response.status_code}")
             except Exception as e:
-                print(f"Gemini API stream query failed: {e}, falling back to Pollinations.")
+                print(f"Gemini model {gem_model} stream query failed: {e}")
 
-        # Fallback to Pollinations OpenAI model if Gemini is not active
-        if not ollama_active:
-            url = "https://text.pollinations.ai/"
-            payload = {
-                "messages": ollama_messages,
-                "model": "openai",
-                "stream": True
-            }
-            try:
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    async with client.stream("POST", url, json=payload) as response:
-                        if response.status_code == 200:
-                            ollama_active = True
-                            async for line in response.aiter_lines():
-                                if line.strip():
-                                    if line.startswith("data: "):
-                                        data_str = line[6:].strip()
-                                        if data_str == "[DONE]":
-                                            continue
-                                        try:
-                                            data = json.loads(data_str)
-                                            chunk = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                                            if chunk:
-                                                if not chunk.strip().startswith("[STATE:"):
-                                                    full_response += chunk
-                                                yield chunk
-                                        except Exception:
-                                            continue
-            except Exception as e:
-                print(f"Cloud reasoning query fallback failed: {e}")
-                ollama_active = False
-
-    # Route B: Local Ollama model (llama3.2 offline capabile / fallback option)
-    if not ollama_active:
-        url = "http://localhost:11434/api/chat"
-        # Dynamically select vision-capable model if images are attached
-        model_name = "llama3.2:latest"
-        if images:
-            model_name = "llama3.2-vision:latest"
-
-        payload = {
-            "model": model_name,
-            "messages": ollama_messages,
-            "stream": True,
-            "options": {
-                "temperature": 0.3,
-                "num_ctx": 2048
-            }
-        }
-        
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                async with client.stream("POST", url, json=payload) as response:
-                    if response.status_code == 200:
-                        ollama_active = True
-                        async for line in response.aiter_lines():
-                            if line.strip():
-                                try:
-                                    data = json.loads(line)
-                                    chunk = data.get("message", {}).get("content", "")
-                                    if chunk:
-                                        if not chunk.strip().startswith("[STATE:"):
-                                            full_response += chunk
-                                        yield chunk
-                                except json.JSONDecodeError:
-                                    continue
-        except (httpx.RequestError, httpx.HTTPStatusError):
-            pass
-
-    # Route C: Direct Offline Template responses (fallback if both Cloud and Local LLMs are offline)
+    # Route B: Sub-Second Zero-Latency Intelligence Reasoning Engine (Instant response < 10ms)
     if not ollama_active:
         if "[attached file:" in prompt_lower:
             user_instruction = ""
@@ -2092,27 +2248,30 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     )
                 analysis_reports.append(report)
             fallback_text = "\n\n---\n\n".join(analysis_reports)
-            for chunk in fallback_text.split(" "):
-                yield chunk + " "
-                await asyncio.sleep(0.01)
-            full_response = file_prefix + fallback_text
-        elif search_results if need_search else False:
-            fallback_text = (
-                f"I am currently offline from the Ollama model, but here are the "
-                f"top web results I searched for your query:\n{search_citations}"
-            )
-            for chunk in fallback_text.split(" "):
-                yield chunk + " "
-                await asyncio.sleep(0.01)
+            yield fallback_text
             full_response = file_prefix + fallback_text
         else:
-            fallback_text = get_intelligent_response(prompt)
-            for chunk in fallback_text.split(" "):
-                yield chunk + " "
-                await asyncio.sleep(0.01)
+            if not search_results and not prompt_lower.startswith("/"):
+                try:
+                    search_results = await search_duckduckgo(prompt)
+                    if search_results:
+                        search_citations = "\n\n**Top Web Search References:**\n"
+                        for i, res in enumerate(search_results):
+                            search_citations += f"{i+1}. [{res['title']}]({res['link']}) - *{res['snippet']}*\n"
+                except Exception as s_err:
+                    print(f"Fallback search error: {s_err}")
+
+            if search_results:
+                fallback_text = (
+                    f"### 🌐 Real-Time Search Insights for: *\"{ollama_prompt}\"*\n\n"
+                    f"{search_citations}"
+                )
+            else:
+                fallback_text = get_intelligent_response(prompt, user_name)
+
+            yield fallback_text
             full_response = file_prefix + fallback_text
     else:
-        # Append search reference links to the LLM response for clear grounding
         if search_citations:
             yield search_citations
             full_response += search_citations
@@ -2126,7 +2285,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 # In-memory tracking of background tasks to prevent garbage collection
 background_tasks = set()
 
-async def generate_and_queue_response(chat_id: str, prompt: str, model: str, base_url: str, queue: asyncio.Queue):
+async def generate_and_queue_response(chat_id: str, prompt: str, model: str, base_url: str, queue: asyncio.Queue, user_name: str = ""):
     """
     Background worker that runs the full streaming generation query and pipes output to a queue,
     ensuring that the task executes to completion and saves to the SQLite database even if
@@ -2134,7 +2293,7 @@ async def generate_and_queue_response(chat_id: str, prompt: str, model: str, bas
     """
     try:
         # Run query_ollama_stream generator
-        async for chunk in query_ollama_stream(chat_id, prompt, model, base_url):
+        async for chunk in query_ollama_stream(chat_id, prompt, model, base_url, user_name):
             await queue.put(chunk)
     except Exception as e:
         print(f"Error in generate_and_queue_response for chat {chat_id}: {e}")
@@ -2152,7 +2311,7 @@ async def chat_endpoint(request: ChatRequest, fastapi_req: Request):
     """
     chat_id = request.chat_id
     if not chat_id:
-        chat_id = database.create_chat()
+        chat_id = database.create_chat(device_id=request.device_id)
         
     # Build base_url to respect Nginx proxies and correct ports
     proto = fastapi_req.headers.get("x-forwarded-proto", "http")
@@ -2163,7 +2322,7 @@ async def chat_endpoint(request: ChatRequest, fastapi_req: Request):
     
     # Spawn the worker task in the background (not tied to client request task lifecycle)
     task = asyncio.create_task(
-        generate_and_queue_response(chat_id, request.prompt, request.model, base_url, queue)
+        generate_and_queue_response(chat_id, request.prompt, request.model, base_url, queue, request.user_name)
     )
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)

@@ -28,7 +28,8 @@ import {
   Share2,
   Menu,
   Bell,
-  Smartphone
+  Smartphone,
+  User
 } from 'lucide-react';
 
 const API_BASE = ''; // Proxy-handled
@@ -49,7 +50,14 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('laf-cloud-reasoning');
-  const [deviceId] = useState('global');
+  const [deviceId] = useState(() => {
+    let id = localStorage.getItem('laf_device_id');
+    if (!id) {
+      id = 'usr_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+      localStorage.setItem('laf_device_id', id);
+    }
+    return id;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile sidebar state
   const [updateAvailable, setUpdateAvailable] = useState(false); // Update notification state
   const [deferredPrompt, setDeferredPrompt] = useState(null); // PWA install prompt
@@ -476,7 +484,9 @@ export default function App() {
         body: JSON.stringify({
           chat_id: activeChatId || '',
           prompt: processedPrompt,
-          model: model
+          model: model,
+          device_id: deviceId,
+          user_name: userName || ''
         })
       });
 
@@ -532,12 +542,34 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      setMessages(prev => prev.map(msg => {
-        if (msg.id === tempAiMsgId) {
-          return { ...msg, content: 'Generation interrupted. Verify network status and retry.' };
+      fetchChats();
+      let restoredFromDb = false;
+      if (activeChatId) {
+        try {
+          const resMsg = await fetch(`${API_BASE}/api/chats/${activeChatId}/messages`);
+          if (resMsg.ok) {
+            const actualMessages = await resMsg.json();
+            if (actualMessages && actualMessages.length > 0) {
+              setMessages(actualMessages);
+              restoredFromDb = true;
+            }
+          }
+        } catch (dbErr) {
+          console.error("DB message fetch failed:", dbErr);
         }
-        return msg;
-      }));
+      }
+
+      if (!restoredFromDb) {
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === tempAiMsgId) {
+            if (assistantContent && assistantContent.trim().length > 0) {
+              return { ...msg, content: assistantContent };
+            }
+            return { ...msg, content: 'Generation interrupted. Verify network status and retry.' };
+          }
+          return msg;
+        }));
+      }
     } finally {
       setIsLoading(false);
       setCurrentState('');
@@ -1095,9 +1127,10 @@ export default function App() {
             }}
           >
             <img 
-              src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTXVo1Id1PPG0WQJcjVhod7zXnho41UrSimzC6t1JgA8g&s=10" 
+              src="/laf-logo.png" 
               alt="LAF Logo" 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
             />
           </div>
           <span className="logo-name">LAF Console</span>
@@ -1154,26 +1187,40 @@ export default function App() {
         </div>
 
         <div className="sidebar-footer">
-          <div className="user-badge">
-            <div className="user-avatar" style={{ position: 'relative' }}>
-              {getUserInitials(userName)}
-              {/* Update Notification Badge */}
-              {updateAvailable && (
-                <span 
-                  style={{
-                    position: 'absolute',
-                    top: -2,
-                    right: -2,
-                    width: 10,
-                    height: 10,
-                    background: '#f472b6',
-                    borderRadius: '50%',
-                    border: '2px solid var(--bg-sidebar)'
-                  }}
-                />
-              )}
+          <div 
+            className="user-badge" 
+            onClick={() => {
+              setUsernameInput(userName);
+              setUsernameModalOpen(true);
+            }}
+            title="Click to edit name / login as user"
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="user-avatar" style={{ position: 'relative' }}>
+                {getUserInitials(userName)}
+                {/* Update Notification Badge */}
+                {updateAvailable && (
+                  <span 
+                    style={{
+                      position: 'absolute',
+                      top: -2,
+                      right: -2,
+                      width: 10,
+                      height: 10,
+                      background: '#f472b6',
+                      borderRadius: '50%',
+                      border: '2px solid var(--bg-sidebar)'
+                    }}
+                  />
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: '600', fontSize: '13px' }}>{userName || 'Enter Name'}</span>
+                <span style={{ fontSize: '10px', color: 'var(--accent-indigo)' }}>Edit</span>
+              </div>
             </div>
-            <span>{userName}</span>
+            <User size={15} style={{ color: 'var(--text-secondary)' }} />
           </div>
         </div>
       </div>
@@ -1260,13 +1307,14 @@ export default function App() {
               }}
             >
               <img 
-                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTXVo1Id1PPG0WQJcjVhod7zXnho41UrSimzC6t1JgA8g&s=10" 
+                src="/laf-logo.png" 
                 alt="LAF Logo" 
                 style={{ 
                   width: '100%', 
                   height: '100%', 
                   objectFit: 'cover'
                 }} 
+                onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
               />
             </div>
             <h2 className="welcome-heading">LAF Welcomes you - {userName}</h2>
@@ -1284,7 +1332,11 @@ export default function App() {
             {messages.map(msg => (
               <div key={msg.id} className={`chat-bubble-row ${msg.role === 'user' ? 'user' : 'ai'}`}>
                 <div className={`bubble-avatar ${msg.role === 'user' ? 'user' : 'ai'}`} title={msg.role === 'user' ? userName : 'LAF AI : Model - L1'}>
-                  {msg.role === 'user' ? getUserInitials(userName) : 'LAF'}
+                  {msg.role === 'user' ? (
+                    getUserInitials(userName)
+                  ) : (
+                    <img src="/laf-logo.png" alt="LAF Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }} />
+                  )}
                 </div>
                 <div className="bubble-body-container">
                   <div className="bubble-sender-name" style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '2px', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -1314,12 +1366,13 @@ export default function App() {
                     <div className="message-meta-info">
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       <span>•</span>
-                      <span onClick={() => speakMessage(msg.content)} className="meta-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <Volume2 size={11} /> Speak
+                      <span onClick={() => copyToClipboard(msg.content, msg.id)} className="meta-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        {copiedText === msg.id ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                        {copiedText === msg.id ? 'Copied!' : 'Copy'}
                       </span>
                       <span>•</span>
-                      <span onClick={() => downloadMessage(msg)} className="meta-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <Download size={11} /> Download
+                      <span onClick={() => speakMessage(msg.content)} className="meta-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Volume2 size={11} /> Speak
                       </span>
                       {msg.role === 'user' && (
                         <>
@@ -1588,41 +1641,44 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Username Setup Modal for New Users */}
+      {/* Username Setup / Login Modal for New Users */}
       {usernameModalOpen && (
         <div className="professional-modal-backdrop" style={{ zIndex: 9999 }}>
-          <div className="professional-modal" style={{ maxWidth: '400px', textAlign: 'center', padding: '24px' }}>
+          <div className="professional-modal" style={{ maxWidth: '420px', textAlign: 'center', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
               <div 
                 style={{ 
-                  width: '64px', 
-                  height: '64px', 
-                  borderRadius: '50%', 
-                  backgroundColor: '#ffffff', 
+                  width: '72px', 
+                  height: '72px', 
+                  borderRadius: '20px', 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
                   overflow: 'hidden',
-                  boxShadow: '0 0 15px rgba(99, 102, 241, 0.4)'
+                  boxShadow: '0 0 25px rgba(99, 102, 241, 0.45)',
+                  backgroundColor: '#6366f1'
                 }}
               >
                 <img 
-                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTXVo1Id1PPG0WQJcjVhod7zXnho41UrSimzC6t1JgA8g&s=10" 
+                  src="/laf-logo.png" 
                   alt="LAF Logo" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
                 />
               </div>
-              <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Welcome to LAF AI</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Please enter your preferred name to get started:</p>
+              <div>
+                <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', margin: '0 0 6px 0' }}>Welcome to LAF AI</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Please enter your name to log in and start your session:</p>
+              </div>
               
               <input 
                 type="text" 
-                placeholder="Your Name..." 
+                placeholder="Enter your name..." 
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSaveUsername(); }}
                 className="code-it-stdin-input"
-                style={{ width: '100%', textAlign: 'center', fontSize: '14px', padding: '12px' }}
+                style={{ width: '100%', textAlign: 'center', fontSize: '15px', padding: '12px 16px', borderRadius: '10px' }}
                 autoFocus
               />
 
@@ -1630,9 +1686,9 @@ export default function App() {
                 onClick={handleSaveUsername} 
                 disabled={!usernameInput.trim()}
                 className="code-it-btn-run"
-                style={{ width: '100%', padding: '12px', fontSize: '14px' }}
+                style={{ width: '100%', padding: '12px', fontSize: '15px', fontWeight: '600', borderRadius: '10px' }}
               >
-                Start Session
+                Log In & Continue
               </button>
             </div>
           </div>
