@@ -50,4 +50,11 @@ ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST "
   sudo docker ps | grep laf
 "
 
-echo "Deployment completed successfully!"
+echo "Step 3: Auto-committing and pushing updates to GitHub repository..."
+if [ -n "$(git status --porcelain)" ]; then
+  git add .
+  git commit -m "Auto-update LAF project: $(date '+%Y-%m-%d %H:%M:%S')"
+fi
+git push origin main || echo "Git push completed or no changes to push."
+
+echo "Deployment and GitHub sync completed successfully!"
