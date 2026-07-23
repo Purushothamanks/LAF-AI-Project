@@ -912,42 +912,48 @@ export default function App() {
 
   // Helper parser for markdown syntax and HTML tag representations (images, videos, audio)
   const parseRichText = (text) => {
+    if (!text || typeof text !== 'string') return text ? String(text) : null;
     const elements = [];
     const mediaRegex = /<(video|audio|img)\s+src="([^"]+)"\s*(?:alt="([^"]*)")?>\s*(?:<\/\1>)?/gi;
     let lastIndex = 0;
     let match;
 
-    while ((match = mediaRegex.exec(text)) !== null) {
-      const prevText = text.substring(lastIndex, match.index);
-      if (prevText) {
-        elements.push(...parseMarkdownBlocks(prevText, `syntax-${lastIndex}`));
+    try {
+      while ((match = mediaRegex.exec(text)) !== null) {
+        const prevText = text.substring(lastIndex, match.index);
+        if (prevText) {
+          elements.push(...parseMarkdownBlocks(prevText, `syntax-${lastIndex}`));
+        }
+
+        const tag = match[1].toLowerCase();
+        const src = match[2];
+        const alt = match[3] || 'media attachment';
+        const key = `media-${lastIndex}`;
+
+        if (tag === 'img') {
+          elements.push(<img key={key} src={src} alt={alt} className="media-tag-image" style={{ maxWidth: '100%', borderRadius: '8px', margin: '8px 0', border: '1px solid var(--border-color)' }} />);
+        } else if (tag === 'audio') {
+          elements.push(<audio key={key} src={src} controls className="media-tag-audio" style={{ width: '100%', margin: '8px 0' }} />);
+        } else if (tag === 'video') {
+          elements.push(<video key={key} src={src} controls className="media-tag-video" style={{ width: '100%', maxHeight: '360px', borderRadius: '8px', margin: '8px 0', background: '#000' }} />);
+        }
+
+        lastIndex = mediaRegex.lastIndex;
       }
 
-      const tag = match[1].toLowerCase();
-      const src = match[2];
-      const alt = match[3] || 'media attachment';
-      const key = `media-${lastIndex}`;
-
-      if (tag === 'img') {
-        elements.push(<img key={key} src={src} alt={alt} className="media-tag-image" style={{ maxWidth: '100%', borderRadius: '8px', margin: '8px 0', border: '1px solid var(--border-color)' }} />);
-      } else if (tag === 'audio') {
-        elements.push(<audio key={key} src={src} controls className="media-tag-audio" style={{ width: '100%', margin: '8px 0' }} />);
-      } else if (tag === 'video') {
-        elements.push(<video key={key} src={src} controls className="media-tag-video" style={{ width: '100%', borderRadius: '8px', background: '#000', margin: '8px 0' }} />);
+      if (lastIndex < text.length) {
+        elements.push(...parseMarkdownBlocks(text.substring(lastIndex), `syntax-${lastIndex}`));
       }
 
-      lastIndex = mediaRegex.lastIndex;
+      return elements;
+    } catch (err) {
+      return text;
     }
-
-    if (lastIndex < text.length) {
-      elements.push(...parseMarkdownBlocks(text.substring(lastIndex), `syntax-${lastIndex}`));
-    }
-
-    return elements;
   };
 
   // Parser for blocks: handles headings, lists, and tabular data tables
   const parseMarkdownBlocks = (text, keyPrefix) => {
+    if (!text || typeof text !== 'string') return [];
     const blocks = [];
     const lines = text.split('\n');
     let currentTable = null;
