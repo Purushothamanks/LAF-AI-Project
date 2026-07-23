@@ -1961,8 +1961,8 @@ export default function App() {
                                   gap: '4px'
                                 }}
                               >
-                                {copiedCodeId === 'codeit-fix' ? <Check size={12} style={{ color: '#4ade80' }} /> : <Copy size={12} />}
-                                <span>{copiedCodeId === 'codeit-fix' ? 'Copied' : 'Copy'}</span>
+                                {copiedText === 'codeit-fix' ? <Check size={12} style={{ color: '#4ade80' }} /> : <Copy size={12} />}
+                                <span>{copiedText === 'codeit-fix' ? 'Copied' : 'Copy'}</span>
                               </button>
                             </div>
                           </div>
