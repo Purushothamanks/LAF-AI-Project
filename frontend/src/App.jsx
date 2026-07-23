@@ -1290,7 +1290,7 @@ export default function App() {
           <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* Mobile Menu Toggle */}
             <button 
-              className="icon-action-btn mobile-only"
+              className="icon-action-btn mobile-only corner-menu-btn"
               onClick={() => setSidebarOpen(prev => !prev)}
               title="Toggle Menu"
             >
