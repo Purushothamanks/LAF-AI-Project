@@ -70,6 +70,10 @@ export default function App() {
   const [codeItConsoleOutput, setCodeItConsoleOutput] = useState('');
   const [codeItConsoleError, setCodeItConsoleError] = useState('');
   const [codeItIsRunning, setCodeItIsRunning] = useState(false);
+  const [codeItActiveTab, setCodeItActiveTab] = useState('console'); // 'console' | 'analysis'
+  const [codeItIsAnalyzing, setCodeItIsAnalyzing] = useState(false);
+  const [codeItAnalysis, setCodeItAnalysis] = useState(null); // { explanation: string, correctedCode: string }
+  const [codeItAppliedToast, setCodeItAppliedToast] = useState(false);
   
   // Search and filter sidebar
   const [searchQuery, setSearchQuery] = useState('');
@@ -353,12 +357,57 @@ export default function App() {
   const handleLanguageChange = (lang) => {
     setCodeItLang(lang);
     setCodeItCode(CODE_TEMPLATES[lang] || '');
+    setCodeItAnalysis(null);
+    setCodeItActiveTab('console');
   };
 
-  const askLafToReviewCode = () => {
-    if (!codeItCode.trim()) return;
-    const promptText = `\`\`\`${codeItLang}\n${codeItCode}\n\`\`\``;
-    handleSendMessage(promptText);
+  const askLafToReviewCode = async () => {
+    if (!codeItCode.trim() || codeItIsAnalyzing) return;
+
+    setCodeItIsAnalyzing(true);
+    setCodeItActiveTab('analysis');
+    setCodeItAnalysis(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/fix_code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: codeItLang,
+          code: codeItCode,
+          errors: codeItConsoleError ? [codeItConsoleError] : [],
+          model: 'laf-cloud-reasoning'
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCodeItAnalysis({
+          explanation: data.explanation || 'Code analyzed successfully.',
+          correctedCode: data.corrected_code || codeItCode
+        });
+      } else {
+        setCodeItAnalysis({
+          explanation: 'Failed to analyze code. API service returned an error.',
+          correctedCode: codeItCode
+        });
+      }
+    } catch (err) {
+      setCodeItAnalysis({
+        explanation: 'Network failure calling LAF AI code analyzer service.',
+        correctedCode: codeItCode
+      });
+    } finally {
+      setCodeItIsAnalyzing(false);
+    }
+  };
+
+  const applyFixToEditor = () => {
+    if (codeItAnalysis && codeItAnalysis.correctedCode) {
+      setCodeItCode(codeItAnalysis.correctedCode);
+      setCodeItAppliedToast(true);
+      setTimeout(() => setCodeItAppliedToast(false), 3000);
+    }
   };
 
   // Text to speech aloud reader
@@ -1781,10 +1830,49 @@ export default function App() {
               />
             </div>
 
-            <div className="code-it-console">
-              <div className="code-it-console-header">
-                <span>⚡ EXECUTION CONSOLE</span>
-                {(codeItConsoleOutput || codeItConsoleError) && (
+            <div className="code-it-console" style={{ height: '260px', flex: 'none', display: 'flex', flexDirection: 'column' }}>
+              <div className="code-it-console-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    onClick={() => setCodeItActiveTab('console')}
+                    style={{
+                      background: codeItActiveTab === 'console' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+                      color: codeItActiveTab === 'console' ? '#fff' : 'var(--text-muted)',
+                      border: 'none',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Terminal size={11} />
+                    <span>CONSOLE</span>
+                  </button>
+                  <button 
+                    onClick={() => setCodeItActiveTab('analysis')}
+                    style={{
+                      background: codeItActiveTab === 'analysis' ? 'rgba(139, 92, 246, 0.25)' : 'transparent',
+                      color: codeItActiveTab === 'analysis' ? '#a78bfa' : 'var(--text-muted)',
+                      border: 'none',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Sparkles size={11} style={{ color: '#a78bfa' }} />
+                    <span>LAF AI ANALYSIS & FIX {codeItAnalysis ? '•' : ''}</span>
+                  </button>
+                </div>
+                {codeItActiveTab === 'console' && (codeItConsoleOutput || codeItConsoleError) && (
                   <button 
                     onClick={() => { setCodeItConsoleOutput(''); setCodeItConsoleError(''); }} 
                     style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '9px' }}
@@ -1792,17 +1880,115 @@ export default function App() {
                     Clear
                   </button>
                 )}
+                {codeItActiveTab === 'analysis' && codeItAnalysis && (
+                  <button 
+                    onClick={() => setCodeItAnalysis(null)} 
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '9px' }}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
-              <div className="code-it-console-body" style={{ color: codeItConsoleError ? '#f87171' : '#4ade80' }}>
-                {codeItIsRunning ? 'Compiling and executing code in sandbox...' : codeItConsoleOutput || codeItConsoleError || 'Sandbox ready. Click Run Code to execute.'}
-              </div>
+
+              {codeItActiveTab === 'console' ? (
+                <div className="code-it-console-body" style={{ color: codeItConsoleError ? '#f87171' : '#4ade80' }}>
+                  {codeItIsRunning ? 'Compiling and executing code in sandbox...' : codeItConsoleOutput || codeItConsoleError || 'Sandbox ready. Click Run Code to execute.'}
+                </div>
+              ) : (
+                <div className="code-it-analysis-body" style={{ flex: 1, padding: '12px', background: '#020409', overflowY: 'auto', fontSize: '12px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
+                  {codeItIsAnalyzing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '10px', color: '#a78bfa' }}>
+                      <div className="state-loader-spinner" style={{ width: '22px', height: '22px', borderWidth: '2px' }} />
+                      <span style={{ fontWeight: '600', fontSize: '12px' }}>Analyzing code structure & compiling fixes on spot...</span>
+                    </div>
+                  ) : codeItAnalysis ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {codeItAppliedToast && (
+                        <div style={{ background: 'rgba(74, 222, 128, 0.15)', border: '1px solid rgba(74, 222, 128, 0.3)', color: '#4ade80', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Check size={14} />
+                          <span>Corrected code applied to Editor! Click "Run Code" to execute.</span>
+                        </div>
+                      )}
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '8px', padding: '12px' }}>
+                        <div style={{ fontWeight: '700', color: '#a78bfa', marginBottom: '8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Sparkles size={13} />
+                          <span>LAF AI Analysis & Explanation</span>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', fontSize: '12px', lineHeight: '1.6' }}>
+                          {codeItAnalysis.explanation}
+                        </div>
+                      </div>
+
+                      {codeItAnalysis.correctedCode && (
+                        <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '8px', padding: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: '700', color: '#4ade80', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Check size={13} />
+                              <span>Corrected Code Solution</span>
+                            </span>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                onClick={applyFixToEditor}
+                                style={{
+                                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Check size={12} />
+                                <span>Apply to Editor</span>
+                              </button>
+                              <button
+                                onClick={() => copyToClipboard(codeItAnalysis.correctedCode, 'codeit-fix')}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  color: 'var(--text-primary)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  fontWeight: '500',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                {copiedCodeId === 'codeit-fix' ? <Check size={12} style={{ color: '#4ade80' }} /> : <Copy size={12} />}
+                                <span>{copiedCodeId === 'codeit-fix' ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                          </div>
+                          <pre style={{ background: '#010204', padding: '10px', borderRadius: '6px', overflowX: 'auto', fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#e2e8f0', border: '1px solid rgba(255, 255, 255, 0.05)', margin: 0 }}>
+                            <code>{codeItAnalysis.correctedCode}</code>
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'var(--text-muted)', gap: '8px', padding: '16px' }}>
+                      <Sparkles size={24} style={{ opacity: 0.5, color: '#8b5cf6' }} />
+                      <span style={{ fontSize: '12px' }}>Click <strong>"Ask LAF"</strong> below to get instant AI code analysis, bug fixes & corrected code right here on spot!</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           
           <div className="code-it-actions-footer">
             <button 
               onClick={runCodeIt} 
-              disabled={codeItIsRunning || !codeItCode.trim()} 
+              disabled={codeItIsRunning || codeItIsAnalyzing || !codeItCode.trim()} 
               className="code-it-btn-run"
               style={{ flex: 1 }}
             >
@@ -1811,13 +1997,13 @@ export default function App() {
             </button>
             <button 
               onClick={askLafToReviewCode} 
-              disabled={codeItIsRunning || !codeItCode.trim()}
+              disabled={codeItIsRunning || codeItIsAnalyzing || !codeItCode.trim()}
               className="code-it-btn-secondary"
-              title="Send to LAF AI for review"
+              title="Analyze and correct code on spot"
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <Sparkles size={13} style={{ color: 'var(--accent-purple)' }} />
-              <span>Ask LAF</span>
+              <span>{codeItIsAnalyzing ? 'Analyzing...' : 'Ask LAF'}</span>
             </button>
           </div>
         </div>
