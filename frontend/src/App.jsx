@@ -703,18 +703,44 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const shareChat = () => {
-    if (messages.length === 0) {
-      alert("No messages to share.");
-      return;
+  const shareChat = async () => {
+    const appUrl = window.location.href;
+    if (messages.length > 0) {
+      let chatContent = `# LAF AI Shared Conversation\n\n`;
+      messages.forEach(msg => {
+        const sender = msg.role === 'user' ? userName : 'LAF AI';
+        chatContent += `### **${sender}** (${new Date(msg.timestamp).toLocaleString()})\n\n${msg.content}\n\n---\n\n`;
+      });
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'LAF AI Platform',
+            text: 'Check out this conversation on LAF AI!',
+            url: appUrl,
+          });
+          return;
+        } catch (e) {
+          // Fallback to clipboard if share sheet dismissed or unsupported
+        }
+      }
+      navigator.clipboard.writeText(chatContent);
+      alert("Conversation copied to clipboard! Share it anywhere. 🚀");
+    } else {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'LAF AI Platform',
+            text: 'Experience LAF AI - High performance AI Assistant & Sandbox!',
+            url: appUrl,
+          });
+          return;
+        } catch (e) {
+          // Fallback to clipboard if share sheet dismissed
+        }
+      }
+      navigator.clipboard.writeText(appUrl);
+      alert("LAF AI app link copied to clipboard! Share it with your friends. 🚀");
     }
-    let chatContent = `# LAF AI Shared Conversation\n\n`;
-    messages.forEach(msg => {
-      const sender = msg.role === 'user' ? userName : 'LAF AI : Model - L1';
-      chatContent += `### **${sender}** (${new Date(msg.timestamp).toLocaleString()})\n\n${msg.content}\n\n---\n\n`;
-    });
-    navigator.clipboard.writeText(chatContent);
-    alert("Conversation history copied to clipboard as formatted markdown! Share it anywhere. 🚀");
   };
 
   const downloadMessage = (msg) => {
@@ -1131,7 +1157,10 @@ export default function App() {
       />
 
       {/* Sidebar */}
-      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <div 
+        className={`sidebar ${sidebarOpen ? 'open' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sidebar-header">
           <div 
             style={{ 
@@ -1267,37 +1296,19 @@ export default function App() {
             >
               <Menu size={18} />
             </button>
-            <h3>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Conversation log' : (
-              <button 
-                onClick={handleInstallPWA}
-                className="model-select-dropdown"
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px', 
-                  fontWeight: '600', 
-                  color: 'var(--accent-indigo)',
-                  cursor: 'pointer'
-                }}
-              >
-                <Smartphone size={14} />
-                <span className="header-btn-text">Download App</span>
-              </button>
-            )}</h3>
+            <h3>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Conversation log' : 'LAF AI'}</h3>
           </div>
 
           <div className="header-right-actions">
-            {messages.length > 0 && (
-              <button 
-                onClick={shareChat} 
-                className="model-select-dropdown"
-                style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '600', color: 'var(--accent-purple)' }}
-                title="Share this conversation"
-              >
-                <Share2 size={13} />
-                <span className="header-btn-text">Share Chat</span>
-              </button>
-            )}
+            <button 
+              onClick={shareChat} 
+              className="model-select-dropdown"
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '600', color: 'var(--accent-purple)', cursor: 'pointer' }}
+              title="Share LAF App"
+            >
+              <Share2 size={13} />
+              <span>Share App</span>
+            </button>
 
             <button 
               onClick={() => setCodeItOpen(prev => !prev)} 
