@@ -232,6 +232,25 @@ export default function App() {
     }
   };
 
+  const handleClearAllData = async () => {
+    if (!window.confirm('Clear all user data and conversation history? This action cannot be undone.')) return;
+    try {
+      for (const chat of chats) {
+        await fetch(`${API_BASE}/api/chats/${chat.id}`, { method: 'DELETE' });
+      }
+      setChats([]);
+      setMessages([]);
+      setCurrentChatId(null);
+      setCurrentState('');
+      setAttachments([]);
+      localStorage.removeItem('laf_username');
+      setUserName('');
+      setUsernameModalOpen(true);
+    } catch (err) {
+      console.error('Failed to clear all data:', err);
+    }
+  };
+
   const handleEditMessage = async (messageId, newContent) => {
     try {
       const res = await fetch(`${API_BASE}/api/messages/edit`, {
@@ -1136,9 +1155,9 @@ export default function App() {
           <span className="logo-name">LAF Console</span>
           {/* Mobile close button */}
           <button 
-            className="icon-action-btn"
+            className="icon-action-btn mobile-only"
             onClick={() => setSidebarOpen(false)}
-            style={{ display: window.innerWidth <= 768 ? 'block' : 'none' }}
+            title="Close sidebar"
           >
             <X size={16} />
           </button>
@@ -1186,7 +1205,18 @@ export default function App() {
           ))}
         </div>
 
-        <div className="sidebar-footer">
+        <div className="sidebar-footer" style={{ flexDirection: 'column', gap: '10px' }}>
+          {chats.length > 0 && (
+            <button 
+              onClick={handleClearAllData} 
+              className="icon-action-btn" 
+              style={{ width: '100%', padding: '6px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+              title="Clear all local data and conversations"
+            >
+              <Trash2 size={12} />
+              <span>Clear All User Data</span>
+            </button>
+          )}
           <div 
             className="user-badge" 
             onClick={() => {
@@ -1231,9 +1261,9 @@ export default function App() {
           <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* Mobile Menu Toggle */}
             <button 
-              className="icon-action-btn"
+              className="icon-action-btn mobile-only"
               onClick={() => setSidebarOpen(true)}
-              style={{ display: window.innerWidth <= 768 ? 'flex' : 'none' }}
+              title="Open Menu"
             >
               <Menu size={18} />
             </button>
@@ -1251,7 +1281,7 @@ export default function App() {
                 }}
               >
                 <Smartphone size={14} />
-                <span>Download App</span>
+                <span className="header-btn-text">Download App</span>
               </button>
             )}</h3>
           </div>
@@ -1265,7 +1295,7 @@ export default function App() {
                 title="Share this conversation"
               >
                 <Share2 size={13} />
-                <span>Share Chat</span>
+                <span className="header-btn-text">Share Chat</span>
               </button>
             )}
 
@@ -1275,14 +1305,14 @@ export default function App() {
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', color: 'var(--accent-indigo)' }}
             >
               <Code size={14} />
-              <span>Code_It</span>
+              <span className="header-btn-text">Code_It</span>
             </button>
 
             <span 
               className="model-select-dropdown"
               style={{ fontWeight: '600', color: 'var(--text-secondary)', cursor: 'default' }}
             >
-              Model : LAF 1
+              LAF 1
             </span>
           </div>
         </div>
