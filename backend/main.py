@@ -1361,33 +1361,32 @@ def get_intelligent_response(prompt: str, user_name: str = "") -> str:
     if any(q in prompt_lower for q in ["how are you", "how are u", "how's it going", "how is it going"]):
         return "I'm doing great and ready to help! How can I assist you today? 😊✨"
 
-    # 9b. "What is X" knowledge breakdown handling
-    if prompt_clean.startswith("what is") or prompt_clean.startswith("tell me about") or prompt_clean.startswith("explain"):
-        topic = re.sub(r'^(what is|tell me about|explain)\s*', '', prompt_clean).strip()
-        if topic in ["time", "the time"]:
-            return (
-                "### ⏳ Understanding Time\n\n"
-                "**Time** is the continued sequence of existence and events that occurs in an apparently irreversible succession from the past, through the present, into the future.\n\n"
-                "**Key Perspectives on Time:**\n"
-                "1. **Physics & Relativity**: In Einstein's Theory of General Relativity, time is woven together with space into a 4-dimensional continuum called *spacetime*. Time slows down under high velocity or extreme gravity (time dilation).\n"
-                "2. **Thermodynamics & Entropy**: The direction of time's arrow is defined by the Second Law of Thermodynamics — entropy (disorder) in an isolated system always increases.\n"
-                "3. **Measurement**: Time is measured internationally in seconds (SI unit), synchronized globally using atomic clocks based on cesium atom oscillations.\n\n"
-                "How else can LAF AI assist you with physics, science, or code today? 😊✨"
-            )
-        elif topic:
-            return (
-                f"### 💡 Insights on **{topic.title()}**\n\n"
-                f"**{topic.title()}** is the topic requested in your query: *\"{prompt.strip()}\"*.\n\n"
-                f"You can ask me to write or execute code, search the web live (`/search {prompt.strip()}`), generate artwork (`/image`), create video (`/video`), or analyze files!"
-            )
+    # 9. Time & Clock Queries Handling
+    if any(k in prompt_clean for k in ["time", "current time", "what time is it", "what is the time", "tell me time", "clock", "date today", "what is the date", "today date"]):
+        import datetime
+        now_formatted = datetime.datetime.now().strftime("%I:%M %p (%d %B %Y)")
+        return f"The current time is **{now_formatted}** ⏰✨\n\nHow can LAF AI assist you further?"
 
-    # 10. Dynamic response for general queries
+    # 10. Journey & History check
+    if any(k in prompt_lower for k in ["your journey", "my journey", "laf journey", "journey", "tell me your journey"]):
+        return (
+            "### 🚀 The Journey of LAF AI\n\n"
+            "LAF AI began with a vision: **Look at The Future** (Language & Agent Framework).\n\n"
+            "**Key Milestones in the LAF Journey:**\n"
+            "1. **Inception & Architecture**: Engineered to create a unified AI platform combining conversational reasoning, real-time code execution, and multi-modal media synthesis in one place.\n"
+            "2. **Multi-Model Orchestration**: Evolved to combine frontier AI model capabilities into an ensemble intelligence engine capable of deep code analysis and live problem solving.\n"
+            "3. **Continuous Evolution**: Continuously updated with sandbox runners, encrypted local memory, and high-performance streaming.\n\n"
+            "I am ready to help you build, code, and innovate! What shall we discuss today? 😊✨"
+        )
+
+    # 11. Dynamic response for general queries
     return (
-        f"I am **LAF AI**, your conversational assistant developed by **Purushothaman**.\n\n"
-        f"Regarding your query **\"{prompt.strip()}\"**:\n"
-        f"You can ask me to write or execute code, search the web live (`/search {prompt.strip()}`), "
+        f"Hello! I am **LAF AI**, your conversational assistant. 😊✨\n\n"
+        f"Regarding *\"{prompt.strip()}\"*:\n"
+        f"LAF AI is ready to help you analyze, code, and solve problems on this topic.\n\n"
+        f"You can also ask me to write or execute code, search the live web (`/search`), "
         f"generate artwork (`/image`), create video (`/video`), or analyze files!\n\n"
-        f"How can I assist you further? 😊✨"
+        f"How can I assist you further?"
     )
 
 def clean_media_subject(prompt: str) -> str:
@@ -2264,7 +2263,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 "stream": True
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.0)) as o_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=2.0)) as o_client:
                     async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
