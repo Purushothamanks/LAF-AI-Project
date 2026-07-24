@@ -2261,7 +2261,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 "stream": True
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.0)) as o_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=2.0)) as o_client:
                     async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
