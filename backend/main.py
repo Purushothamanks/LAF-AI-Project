@@ -2243,15 +2243,15 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     if not ollama_active:
         ollama_url = "http://localhost:11434/api/chat"
         model_aliases = {
-            "laf-cloud-reasoning": "llama3.2:latest",
-            "laf-cloud-v1": "llama3.2:latest",
+            "laf-cloud-reasoning": "phi3:mini",
+            "laf-cloud-v1": "phi3:mini",
             "laf-vision": "llama3.2-vision:latest",
             "laf-fast": "phi3:mini"
         }
-        target_model = model_aliases.get(model, "llama3.2:latest")
+        target_model = model_aliases.get(model, "phi3:mini")
         models_to_try = [target_model]
-        if target_model != "phi3:mini":
-            models_to_try.append("phi3:mini")
+        if target_model != "llama3.2:latest":
+            models_to_try.append("llama3.2:latest")
                 
         for o_model in models_to_try:
             if ollama_active:
