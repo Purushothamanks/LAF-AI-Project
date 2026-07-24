@@ -2181,7 +2181,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 }
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as fast_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as fast_client:
                     async with fast_client.stream("POST", url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
@@ -2204,6 +2204,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                                         continue
                             if has_yielded:
                                 ollama_active = True
+                        elif response.status_code in (400, 401, 403, 429):
+                            print(f"Gemini API model {gem_model} returned {response.status_code} (Quota/Auth error). Stopping Gemini retries.")
+                            break
                         else:
                             print(f"Gemini model {gem_model} status: {response.status_code}")
             except Exception as e:
@@ -2218,11 +2221,10 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             "laf-vision": "llama3.2-vision:latest",
             "laf-fast": "phi3:mini"
         }
-        target_model = model_aliases.get(model, model)
-        models_to_try = []
-        for m_name in [target_model, "llama3.2:latest", "phi3:mini", "llama3:latest"]:
-            if m_name and m_name not in models_to_try:
-                models_to_try.append(m_name)
+        target_model = model_aliases.get(model, "llama3.2:latest")
+        models_to_try = [target_model]
+        if target_model != "phi3:mini":
+            models_to_try.append("phi3:mini")
                 
         for o_model in models_to_try:
             if ollama_active:
@@ -2233,7 +2235,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 "stream": True
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=3.0)) as o_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=1.5)) as o_client:
                     async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
