@@ -1668,6 +1668,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     """
     # 1. Save user prompt in DB
     database.add_message_to_chat(chat_id, "user", prompt)
+    yield "[STATE: THINKING]\n"
     file_prefix = ""
     prompt_lower = prompt.lower().strip()
     prompt_clean = re.sub(r'[^\w\s]', '', prompt_lower).strip()
