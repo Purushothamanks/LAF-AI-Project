@@ -193,6 +193,10 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setChats(data);
+        if (currentChatId && Array.isArray(data) && !data.some(c => c.id === currentChatId)) {
+          setCurrentChatId(null);
+          setMessages([]);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch chats:', err);

@@ -38,6 +38,7 @@ ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST "
   echo 'Wiping old user conversation data for a fresh start...'
   sudo rm -rf /home/ubuntu/laf-project/backend/laf_storage.db*
   touch /home/ubuntu/laf-project/backend/laf_storage.db
+  sudo chmod 777 /home/ubuntu/laf-project/backend/laf_storage.db
 
   echo 'Starting new container laf...'
   sudo docker run -d --name laf --network host \
