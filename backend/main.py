@@ -2031,11 +2031,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 
     # 3. Intent Classification to determine if a web search is needed
     need_search = False
-    gemini_key_check = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-    has_valid_gemini = bool(gemini_key_check and len(gemini_key_check) >= 20)
     
-    # Enable search for explicit triggers or automatically when Gemini key is not set
-    if prompt_lower.startswith("/search") or not has_valid_gemini or any(k in prompt_clean for k in ["search web", "search in web", "search the web", "search internet", "google for", "latest news", "current status", "weather in", "latest updates", "recent news", "happening today", "current president", "launched in 2026", "in 2026"]):
+    # Enable search for explicit triggers or live queries
+    if prompt_lower.startswith("/search") or any(k in prompt_clean for k in ["search web", "search in web", "search the web", "search internet", "google for", "latest news", "current status", "weather in", "latest updates", "recent news", "happening today", "current president", "in 2026"]):
         need_search = True
         
     if "[attached file:" in prompt_lower:
@@ -2210,7 +2208,8 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                         else:
                             print(f"Gemini model {gem_model} status: {response.status_code}")
             except Exception as e:
-                print(f"Gemini model {gem_model} stream query failed: {e}")
+                print(f"Gemini model {gem_model} stream query failed: {e}. Skipping Gemini candidate retries.")
+                break
 
     # Route A2: Local Ollama High-Speed Streaming (Local Host / Docker host Ollama)
     if not ollama_active:
@@ -2235,7 +2234,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 "stream": True
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=1.5)) as o_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.0)) as o_client:
                     async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
@@ -2299,16 +2298,6 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             yield fallback_text
             full_response = file_prefix + fallback_text
         else:
-            if not search_results and not prompt_lower.startswith("/"):
-                try:
-                    search_results = await search_duckduckgo(prompt)
-                    if search_results:
-                        search_citations = "\n\n**Top Web Search References:**\n"
-                        for i, res in enumerate(search_results):
-                            search_citations += f"{i+1}. [{res['title']}]({res['link']}) - *{res['snippet']}*\n"
-                except Exception as s_err:
-                    print(f"Fallback search error: {s_err}")
-
             base_answer = get_intelligent_response(prompt, user_name)
             if search_citations:
                 fallback_text = f"{base_answer}\n\n{search_citations}"
