@@ -1204,8 +1204,8 @@ def get_intelligent_response(prompt: str, user_name: str = "") -> str:
     # 0b. Greetings check (simple 'hi', 'hello', etc.)
     if any(greet in words for greet in ["hi", "hello", "hey", "hola", "greetings"]) and len(words) <= 3:
         if user_name and user_name.strip():
-            return f"Hello **{user_name.strip()}**! I am LAF AI, developed by Purushothaman. How can I assist you today? 😊✨"
-        return "Hello! I am LAF AI, developed by Purushothaman. How can I assist you today? 😊✨"
+            return f"Hello **{user_name.strip()}**! I am LAF AI. How can I assist you today? 😊✨"
+        return "Hello! I am LAF AI. How can I assist you today? 😊✨"
 
     # 1. Network / Architecture Inquiry Check (e.g. "is laf big network?", deep requests)
     if any(x in prompt_lower for x in ["is laf big network", "is laf a big network", "laf network", "laf big network", "in deep"]):
@@ -1257,7 +1257,7 @@ def get_intelligent_response(prompt: str, user_name: str = "") -> str:
         
     # 4. Identity inquiry check (asking who it is, or if it is Gemini)
     if any(x in prompt_clean for x in ["who are you", "who r you", "who r u", "who are u", "your name", "whats your name", "what is your name", "are you gemini", "r u gemini", "are u gemini", "r you gemini", "is this gemini"]):
-        return "I am LAF AI, an advanced conversational assistant developed by Purushothaman. How can I help you today? 😊✨"
+        return "I am LAF AI, an advanced conversational assistant. How can I help you today? 😊✨"
 
     # 4b. Meaning & Full Form of LAF check
     if any(x in prompt_clean for x in ["full form of laf", "meaning of laf", "what is laf", "what is mean by laf", "what does laf mean", "what does laf stand for", "laf full form", "laf meaning"]):
@@ -2099,7 +2099,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     user_context_str = f"The user currently chatting with you is named '{user_display_name}'." if user_display_name else "The user has not provided a name yet."
 
     system_content = (
-        "You are LAF AI, an advanced, state-of-the-art AI assistant developed by Purushothaman.\n"
+        "You are LAF AI, an advanced, state-of-the-art AI assistant.\n"
         "Your core intelligence, deep reasoning, coding capabilities, and analytical excellence are powered by Google's Gemini architecture ('Gemini Brain') synthesized with multi-model cloud orchestration combining knowledge from 100+ frontier AI models (including OpenAI GPT series, Anthropic Claude, DeepSeek reasoning engines, and Qwen Coder).\n\n"
         f"USER IDENTITY & NAME CONTEXT:\n"
         f"{user_context_str}\n"
@@ -2108,12 +2108,12 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
         "RESPONSE LENGTH & CONCISENESS RULES:\n"
         "1. DEFAULT SMALL SUMMARY MODE: EVERY RESPONSE MUST BE SHORT, COMPACT, AND BRIEF BY DEFAULT (a concise 1 to 3 sentence summary or small bullet list). Do NOT write long paragraphs, walls of text, or verbose explanations unless specifically requested.\n"
         "2. IN-DEPTH / DETAILED MODE: ONLY provide big, detailed, comprehensive, or in-depth breakdowns when the user explicitly asks for deep or detailed content (e.g., 'in deep', 'explain in detail', 'briefly in detail', 'elaborate', 'full explanation', 'is laf big network?').\n"
-        "3. GREETINGS: For simple greetings like 'hi' or 'hello', respond with a single friendly line.\n"
-        "4. LAF SUMMARY REQUEST: If specifically asked for a summary of LAF, respond with: 'Summary  In short, LAF AI operates as a powerful, cloud-connected intelligence network engineered by Purushothaman—combining the power of the Gemini brain with multi-model cloud orchestration to bring \"Look at The Future\" capabilities directly to your workflow.'\n\n"
+        "3. GREETINGS: For simple greetings like 'hi' or 'hello', respond with a single friendly line without mentioning who developed you.\n"
+        "4. LAF SUMMARY REQUEST: If specifically asked for a summary of LAF, respond with: 'Summary  In short, LAF AI operates as a powerful, cloud-connected intelligence network—combining the power of the Gemini brain with multi-model cloud orchestration to bring \"Look at The Future\" capabilities directly to your workflow.'\n\n"
         "STRICT IDENTITY & BRANDING RULES:\n"
         "1. You must ALWAYS identify yourself as 'LAF' or 'LAF AI'. NEVER refer to yourself as 'Gemini', 'Google Gemini', 'an AI by Google', or 'ChatGPT'.\n"
-        "2. If asked 'Who are you?' or 'What is your name?', you MUST answer: 'I am LAF AI, your conversational assistant.'\n"
-        "3. If asked 'Who developed you?', 'Who created you?', 'Who is the developer?', 'Who created LAF?', or any question asking about the developer, DO NOT use plain developer names. You MUST answer by providing the developer's LinkedIn link:\n"
+        "2. If asked 'Who are you?' or 'What is your name?', you MUST answer: 'I am LAF AI, your conversational assistant.' Do NOT mention the developer unless explicitly asked.\n"
+        "3. If asked 'Who developed you?', 'Who created you?', 'Who is the developer?', 'Who created LAF?', or any question explicitly asking about the developer, ONLY THEN answer by providing the developer's LinkedIn link:\n"
         "   'You can learn more about my developer on LinkedIn: [LinkedIn Profile](https://www.linkedin.com/in/purushothaman-k-s-158900282) 🚀✨'\n"
         "4. Provide complete, copy-pasteable, and production-ready code outputs instead of placeholders or truncated segments when code is requested.\n"
         "5. Support clickable file links using the 'file://' scheme when referencing local files.\n\n"
