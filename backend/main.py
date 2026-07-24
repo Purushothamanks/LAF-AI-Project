@@ -150,11 +150,38 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; "
+        "connect-src 'self' https: http: wss: ws:; "
+        "font-src 'self' https: http: data:; "
+        "img-src 'self' https: http: data: blob:; "
+        "media-src 'self' https: http: data: blob:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http:; "
+        "style-src 'self' 'unsafe-inline' https: http:;"
+    )
     if request.url.path == "/" or request.url.path.endswith(".html") or "." not in request.url.path.split("/")[-1]:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+@app.get("/sw.js")
+@app.get("/service-worker.js")
+async def unregister_sw():
+    js_content = """
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+      .then(() => self.registration.unregister())
+  );
+});
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
+});
+"""
+    return Response(content=js_content, media_type="application/javascript")
 
 # Initialize database and AI Model Knowledge Base on startup
 @app.on_event("startup")

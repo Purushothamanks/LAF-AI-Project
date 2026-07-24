@@ -79,6 +79,12 @@ class ErrorBoundary extends Component {
   }
 }
 
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(registration => registration.unregister());
+  }).catch(err => console.warn('Service worker unregister error:', err));
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
