@@ -177,27 +177,35 @@ def get_messages_for_chat(chat_id: str):
 def add_message_to_chat(chat_id: str, role: str, content: str) -> str:
     """
     Adds a message to a chat session, encrypting message content.
+    Automatically creates the chat if it does not exist to prevent foreign key errors.
     """
     msg_id = str(uuid.uuid4())
     timestamp = datetime.now().isoformat()
     
-    # If this is the first user message, update the chat title to match the query (plaintext title)
-    if role == "user":
-        with get_db_connection() as conn:
-            # Check if this is the first user message in this chat
+    with get_db_connection() as conn:
+        # Ensure chat exists in DB to prevent foreign key constraint failure
+        chat_exists = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        if not chat_exists:
+            title = content[:30] + "..." if len(content) > 30 else content
+            conn.execute(
+                "INSERT INTO chats (id, title, created_at, device_id) VALUES (?, ?, ?, ?)",
+                (chat_id, title, timestamp, "global")
+            )
+            conn.commit()
+
+        # If this is the first user message, update the chat title to match the query (plaintext title)
+        if role == "user":
             message_count = conn.execute(
                 "SELECT COUNT(*) FROM messages WHERE chat_id = ? AND role = 'user'",
                 (chat_id,)
             ).fetchone()[0]
             
             if message_count == 0:
-                # Update title to a preview of the prompt
                 title = content[:30] + "..." if len(content) > 30 else content
                 conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
                 conn.commit()
 
-    encrypted_content = encrypt_text(content)
-    with get_db_connection() as conn:
+        encrypted_content = encrypt_text(content)
         conn.execute(
             "INSERT INTO messages (id, chat_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
             (msg_id, chat_id, role, encrypted_content, timestamp)

@@ -2160,7 +2160,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     gemini_key = gemini_key.strip().strip('"').strip("'")
     
-    if gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
+    if gemini_key and len(gemini_key) >= 20:
         gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
         candidate_models = [
             "gemini-2.0-flash-lite",
@@ -2208,6 +2208,51 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                             print(f"Gemini model {gem_model} status: {response.status_code}")
             except Exception as e:
                 print(f"Gemini model {gem_model} stream query failed: {e}")
+
+    # Route A2: Local Ollama High-Speed Streaming (Local Host / Docker host Ollama)
+    if not ollama_active:
+        ollama_url = "http://localhost:11434/api/chat"
+        model_aliases = {
+            "laf-cloud-reasoning": "llama3.2:latest",
+            "laf-cloud-v1": "llama3.2:latest",
+            "laf-vision": "llama3.2-vision:latest",
+            "laf-fast": "phi3:mini"
+        }
+        target_model = model_aliases.get(model, model)
+        models_to_try = []
+        for m_name in [target_model, "llama3.2:latest", "phi3:mini", "llama3:latest"]:
+            if m_name and m_name not in models_to_try:
+                models_to_try.append(m_name)
+                
+        for o_model in models_to_try:
+            if ollama_active:
+                break
+            payload = {
+                "model": o_model,
+                "messages": ollama_messages,
+                "stream": True
+            }
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=3.0)) as o_client:
+                    async with o_client.stream("POST", ollama_url, json=payload) as response:
+                        if response.status_code == 200:
+                            has_yielded = False
+                            async for line in response.aiter_lines():
+                                if line.strip():
+                                    try:
+                                        data = json.loads(line)
+                                        chunk = data.get("message", {}).get("content", "")
+                                        if chunk:
+                                            if not chunk.strip().startswith("[STATE:"):
+                                                full_response += chunk
+                                            yield chunk
+                                            has_yielded = True
+                                    except Exception:
+                                        continue
+                            if has_yielded:
+                                ollama_active = True
+            except Exception as e:
+                print(f"Ollama model {o_model} streaming failed: {e}")
 
     # Route B: Sub-Second Zero-Latency Intelligence Reasoning Engine (Instant response < 10ms)
     if not ollama_active:
@@ -2262,13 +2307,11 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 except Exception as s_err:
                     print(f"Fallback search error: {s_err}")
 
-            if search_results:
-                fallback_text = (
-                    f"### 🌐 Real-Time Search Insights for: *\"{ollama_prompt}\"*\n\n"
-                    f"{search_citations}"
-                )
+            base_answer = get_intelligent_response(prompt, user_name)
+            if search_citations:
+                fallback_text = f"{base_answer}\n\n{search_citations}"
             else:
-                fallback_text = get_intelligent_response(prompt, user_name)
+                fallback_text = base_answer
 
             yield fallback_text
             full_response = file_prefix + fallback_text
