@@ -1435,7 +1435,9 @@ def get_codebase_context(query: str) -> str:
     Search local project files for query terms and return relevant context.
     This acts as the 'LAF Trained Data' context.
     """
-    query_lower = query.lower()
+    query_lower = query.lower().strip()
+    if query_lower in ["hi", "hi laf", "hello", "hello laf", "hey", "hey laf", "hi!", "hello!", "hey!"]:
+        return ""
     # Bypassing codebase context for general/workflow/identity questions to avoid exposing internal files
     bypass_keywords = [
         "work process", "work-process", "workflow", "work-flow", 

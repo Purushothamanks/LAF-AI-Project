@@ -244,6 +244,9 @@ def get_global_memory_context(current_chat_id: str, query_prompt: str = None, li
     Falls back to chronological recent messages if no query_prompt is provided or similarity match is low.
     """
     try:
+        if query_prompt and query_prompt.lower().strip() in ["hi", "hi laf", "hello", "hello laf", "hey", "hey laf", "hi!", "hello!", "hey!"]:
+            return ""
+
         import collections
         import math
         
