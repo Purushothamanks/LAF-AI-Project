@@ -1,61 +1,45 @@
 #!/bin/bash
 set -e
 
-if [ -f "/home/purushothaman/Videos/laf-project/Final-Pro-Key.pem" ]; then
-  KEY_PATH="/home/purushothaman/Videos/laf-project/Final-Pro-Key.pem"
-elif [ -f "/home/purushothaman/AWS keys/Final-Pro-Key.pem" ]; then
-  KEY_PATH="/home/purushothaman/AWS keys/Final-Pro-Key.pem"
-else
-  KEY_PATH="./Final-Pro-Key.pem"
-fi
 REMOTE_HOST="98.89.32.42"
 REMOTE_USER="ubuntu"
+KEY_PATH="/home/purushothaman/Videos/laf-project/Final-Pro-Key.pem"
 REMOTE_DIR="/home/ubuntu/laf-project"
 
 echo "=========================================="
-echo "    LAF PLATFORM DEPLOYMENT SCRIPT        "
+echo "    LAF PLATFORM CLEAN DEPLOYMENT SCRIPT  "
 echo "=========================================="
 
-echo "Step 1: Syncing codebase to remote server..."
-rsync -avz -e "ssh -i '$KEY_PATH' -o StrictHostKeyChecking=no" \
-  --exclude 'backend/laf_storage.db*' \
-  --exclude 'backend/__pycache__' \
-  --exclude 'frontend/node_modules' \
-  --exclude 'frontend/dist' \
+echo "Step 1: Syncing fresh codebase to remote server..."
+rsync -avz -e "ssh -i $KEY_PATH -o StrictHostKeyChecking=no" \
+  --exclude 'node_modules' \
+  --exclude 'dist' \
   --exclude '.git' \
-  ./ $REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/
+  --exclude 'laf_storage.db*' \
+  /home/purushothaman/Videos/laf-project/ $REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/
 
-echo "Step 2: Building remote Docker image and restarting container..."
+echo "Step 2: Building remote Docker image without cache and restarting container..."
 ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST "
   cd $REMOTE_DIR
-  echo 'Building Docker image laf:latest without cache...'
+  echo 'Building Docker image laf:latest...'
   sudo docker build --no-cache -t laf:latest .
   
   echo 'Stopping and removing old container laf...'
   sudo docker stop laf || true
   sudo docker rm laf || true
   
-  echo 'Wiping old user conversation data for a fresh start...'
-  sudo rm -rf /home/ubuntu/laf-project/backend/laf_storage.db*
-  touch /home/ubuntu/laf-project/backend/laf_storage.db
-  sudo chmod 777 /home/ubuntu/laf-project/backend/laf_storage.db
-
-  echo 'Starting new container laf...'
+  echo 'Starting fresh container laf...'
   sudo docker run -d --name laf --network host \
-    -v /home/ubuntu/laf-project/backend/laf_storage.db:/app/backend/laf_storage.db \
-    -v /home/ubuntu/laf-project/.env:/app/.env \
-    --env-file /home/ubuntu/laf-project/.env \
     --restart unless-stopped laf:latest
-    
-  echo 'Checking status of containers...'
+  
+  echo 'Checking status of container...'
   sudo docker ps | grep laf
 "
 
 echo "Step 3: Auto-committing and pushing updates to GitHub repository..."
-if [ -n "$(git status --porcelain)" ]; then
-  git add .
-  git commit -m "Auto-update LAF project: $(date '+%Y-%m-%d %H:%M:%S')"
-fi
-git push origin main || echo "Git push completed or no changes to push."
+cd /home/purushothaman/Videos/laf-project
+git add .
+git commit -m "Fresh start: Clean high-performance LAF architecture: $(date '+%Y-%m-%d %H:%M:%S')" || true
+git push origin main || true
 
 echo "Deployment and GitHub sync completed successfully!"
