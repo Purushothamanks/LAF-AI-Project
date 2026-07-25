@@ -2256,12 +2256,12 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             model_aliases = {
                 "laf-cloud-reasoning": "llama3.2:latest",
                 "laf-cloud-v1": "llama3.2:latest",
-                "laf-vision": "llama3.2:latest",
-                "laf-fast": "llama3.2:latest"
+                "laf-vision": "llama3.2-vision:latest",
+                "laf-fast": "phi3:mini"
             }
             target_model = model_aliases.get(model, "llama3.2:latest")
             models_to_try = []
-            for m_candidate in [target_model, "llama3.2:latest", "llama3:latest", "phi3:mini"]:
+            for m_candidate in [target_model, "llama3.2:latest", "phi3:mini", "llama3:latest"]:
                 if m_candidate and m_candidate not in models_to_try:
                     models_to_try.append(m_candidate)
                     
@@ -2271,7 +2271,13 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 payload = {
                     "model": o_model,
                     "messages": ollama_messages,
-                    "stream": True
+                    "stream": True,
+                    "options": {
+                        "num_ctx": 2048,
+                        "num_predict": 512,
+                        "temperature": 0.7,
+                        "top_p": 0.9
+                    }
                 }
                 try:
                     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as o_client:
