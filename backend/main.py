@@ -2242,30 +2242,40 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 
     # Route A2: Local Ollama High-Speed Streaming (Local Host / Docker host Ollama)
     if not ollama_active:
-        ollama_url = "http://localhost:11434/api/chat"
-        model_aliases = {
-            "laf-cloud-reasoning": "llama3.2:latest",
-            "laf-cloud-v1": "llama3.2:latest",
-            "laf-vision": "llama3.2:latest",
-            "laf-fast": "llama3.2:latest"
-        }
-        target_model = model_aliases.get(model, "llama3.2:latest")
-        models_to_try = []
-        for m_candidate in [target_model, "llama3.2:latest", "llama3:latest", "phi3:mini"]:
-            if m_candidate and m_candidate not in models_to_try:
-                models_to_try.append(m_candidate)
-                
-        for o_model in models_to_try:
-            if ollama_active:
-                break
-            payload = {
-                "model": o_model,
-                "messages": ollama_messages,
-                "stream": True
+        ollama_available = False
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(0.4, connect=0.4)) as ping_client:
+                r = await ping_client.get("http://localhost:11434/api/tags")
+                if r.status_code == 200:
+                    ollama_available = True
+        except Exception:
+            ollama_available = False
+
+        if ollama_available:
+            ollama_url = "http://localhost:11434/api/chat"
+            model_aliases = {
+                "laf-cloud-reasoning": "llama3.2:latest",
+                "laf-cloud-v1": "llama3.2:latest",
+                "laf-vision": "llama3.2:latest",
+                "laf-fast": "llama3.2:latest"
             }
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as o_client:
-                    async with o_client.stream("POST", ollama_url, json=payload) as response:
+            target_model = model_aliases.get(model, "llama3.2:latest")
+            models_to_try = []
+            for m_candidate in [target_model, "llama3.2:latest", "llama3:latest", "phi3:mini"]:
+                if m_candidate and m_candidate not in models_to_try:
+                    models_to_try.append(m_candidate)
+                    
+            for o_model in models_to_try:
+                if ollama_active:
+                    break
+                payload = {
+                    "model": o_model,
+                    "messages": ollama_messages,
+                    "stream": True
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=2.0)) as o_client:
+                        async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False
                             async for line in response.aiter_lines():
