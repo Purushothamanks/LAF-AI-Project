@@ -2244,7 +2244,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     if not ollama_active:
         ollama_available = False
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(0.4, connect=0.4)) as ping_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=3.0)) as ping_client:
                 r = await ping_client.get("http://localhost:11434/api/tags")
                 if r.status_code == 200:
                     ollama_available = True
@@ -2274,7 +2274,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     "stream": True
                 }
                 try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=2.0)) as o_client:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as o_client:
                         async with o_client.stream("POST", ollama_url, json=payload) as response:
                             if response.status_code == 200:
                                 has_yielded = False
