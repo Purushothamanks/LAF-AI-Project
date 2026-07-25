@@ -2276,24 +2276,24 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 try:
                     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=2.0)) as o_client:
                         async with o_client.stream("POST", ollama_url, json=payload) as response:
-                        if response.status_code == 200:
-                            has_yielded = False
-                            async for line in response.aiter_lines():
-                                if line.strip():
-                                    try:
-                                        data = json.loads(line)
-                                        chunk = data.get("message", {}).get("content", "")
-                                        if chunk:
-                                            if not chunk.strip().startswith("[STATE:"):
-                                                full_response += chunk
-                                            yield chunk
-                                            has_yielded = True
-                                    except Exception:
-                                        continue
-                            if has_yielded:
-                                ollama_active = True
-            except Exception as e:
-                print(f"Ollama model {o_model} streaming failed: {e}")
+                            if response.status_code == 200:
+                                has_yielded = False
+                                async for line in response.aiter_lines():
+                                    if line.strip():
+                                        try:
+                                            data = json.loads(line)
+                                            chunk = data.get("message", {}).get("content", "")
+                                            if chunk:
+                                                if not chunk.strip().startswith("[STATE:"):
+                                                    full_response += chunk
+                                                yield chunk
+                                                has_yielded = True
+                                        except Exception:
+                                            continue
+                                if has_yielded:
+                                    ollama_active = True
+                except Exception as e:
+                    print(f"Ollama model {o_model} streaming failed: {e}")
 
     # Route B: Sub-Second Zero-Latency Intelligence Reasoning Engine (Instant response < 10ms)
     if not ollama_active:
