@@ -28,8 +28,8 @@ rsync -avz -e "ssh -i '$KEY_PATH' -o StrictHostKeyChecking=no" \
 echo "Step 2: Building remote Docker image and restarting container..."
 ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST "
   cd $REMOTE_DIR
-  echo 'Building Docker image laf:latest...'
-  sudo docker build -t laf:latest .
+  echo 'Building Docker image laf:latest without cache...'
+  sudo docker build --no-cache -t laf:latest .
   
   echo 'Stopping and removing old container laf...'
   sudo docker stop laf || true
