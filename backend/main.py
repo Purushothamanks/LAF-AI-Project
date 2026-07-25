@@ -2253,17 +2253,17 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
 
         if ollama_available:
             ollama_url = "http://localhost:11434/api/chat"
-            model_aliases = {
-                "laf-cloud-reasoning": "llama3.2:latest",
-                "laf-cloud-v1": "llama3.2:latest",
-                "laf-vision": "llama3.2-vision:latest",
-                "laf-fast": "phi3:mini"
-            }
-            target_model = model_aliases.get(model, "llama3.2:latest")
-            models_to_try = []
-            for m_candidate in [target_model, "llama3.2:latest", "phi3:mini", "llama3:latest"]:
-                if m_candidate and m_candidate not in models_to_try:
-                    models_to_try.append(m_candidate)
+            
+            # Dynamic Smart Model Router based on Question Intent
+            prompt_lower = prompt.lower()
+            if "data:image" in prompt or "/image" in prompt or "/video" in prompt:
+                models_to_try = ["llama3.2-vision:latest", "llava:latest", "llama3.2:latest"]
+            elif any(w in prompt_lower for w in ["code", "python", "javascript", "react", "html", "css", "function", "class", "algorithm", "debug", "error", "script", "def ", "import ", "const ", "var "]):
+                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
+            elif len(prompt) < 120 or any(w in prompt_lower for w in ["hi", "hello", "hey", "who are you", "what is", "how to", "thanks", "thank you", "math", "calculate"]):
+                models_to_try = ["phi3:mini", "llama3.2:latest", "llama3:latest"]
+            else:
+                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
                     
             for o_model in models_to_try:
                 if ollama_active:
