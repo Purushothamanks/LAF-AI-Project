@@ -2187,7 +2187,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     gemini_key = gemini_key.strip().strip('"').strip("'")
     
-    if gemini_key and len(gemini_key) >= 20:
+    if gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
         gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
         candidate_models = [
             "gemini-2.0-flash-lite",
