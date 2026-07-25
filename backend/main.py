@@ -2244,15 +2244,16 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     if not ollama_active:
         ollama_url = "http://localhost:11434/api/chat"
         model_aliases = {
-            "laf-cloud-reasoning": "phi3:mini",
-            "laf-cloud-v1": "phi3:mini",
-            "laf-vision": "llama3.2-vision:latest",
-            "laf-fast": "phi3:mini"
+            "laf-cloud-reasoning": "llama3.2:latest",
+            "laf-cloud-v1": "llama3.2:latest",
+            "laf-vision": "llama3.2:latest",
+            "laf-fast": "llama3.2:latest"
         }
-        target_model = model_aliases.get(model, "phi3:mini")
-        models_to_try = [target_model]
-        if target_model != "llama3.2:latest":
-            models_to_try.append("llama3.2:latest")
+        target_model = model_aliases.get(model, "llama3.2:latest")
+        models_to_try = []
+        for m_candidate in [target_model, "llama3.2:latest", "llama3:latest", "phi3:mini"]:
+            if m_candidate and m_candidate not in models_to_try:
+                models_to_try.append(m_candidate)
                 
         for o_model in models_to_try:
             if ollama_active:
@@ -2263,7 +2264,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 "stream": True
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(4.5, connect=1.0)) as o_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as o_client:
                     async with o_client.stream("POST", ollama_url, json=payload) as response:
                         if response.status_code == 200:
                             has_yielded = False

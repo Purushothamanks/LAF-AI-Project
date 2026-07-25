@@ -1,4 +1,4 @@
-import subprocess
+
 import os
 
 def check_laf_web():
@@ -22,8 +22,7 @@ def check_laf_web():
         echo '=== Docker PS with Ports ==='
         sudo docker ps --format "table {{.Names}}\\t{{.Ports}}\\t{{.Status}}"
         echo ''
-        echo '=== Check if Nginx is running ==='
-        sudo systemctl status nginx 2>&1 || echo "Nginx not running via systemd"
+        echo '=== Check if Nginx is running ===' sudo systemctl status nginx 2>&1 || echo "Nginx not running via systemd"
         echo ''
         echo '=== Check Docker Compose / deploy config ==='
         cd /home/ubuntu/laf-project && ls -la
