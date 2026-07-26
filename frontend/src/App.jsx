@@ -1238,7 +1238,7 @@ export default function App() {
             }}
           >
             <img 
-              src="/laf-logo.svg" 
+              src="/laf-logo.png" 
               alt="LAF Logo" 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
             />
@@ -1443,7 +1443,7 @@ export default function App() {
               }}
             >
               <img 
-                src="/laf-logo.svg" 
+                src="/laf-logo.png" 
                 alt="LAF Logo" 
                 style={{ 
                   width: '100%', 
@@ -1470,7 +1470,7 @@ export default function App() {
                   {msg.role === 'user' ? (
                     getUserInitials(userName)
                   ) : (
-                    <img src="/laf-logo.svg" alt="LAF Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src="/laf-logo.png" alt="LAF Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   )}
                 </div>
                 <div className="bubble-body-container">
@@ -1803,7 +1803,7 @@ export default function App() {
                 }}
               >
                 <img 
-                  src="/laf-logo.svg" 
+                  src="/laf-logo.png" 
                   alt="LAF Logo" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />

@@ -2176,32 +2176,53 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     ollama_active = False
     full_response = file_prefix
 
-    # Route A0: Free High-Speed Cloud AI Streaming (100% Free, Sub-Second Latency)
-    if not ollama_active:
-        try:
-            cloud_messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": prompt}
-            ]
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Content-Type": "application/json"
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.0), headers=headers) as cloud_client:
-                resp = await cloud_client.post(
-                    "https://text.pollinations.ai/openai",
-                    json={"messages": cloud_messages, "model": "openai"},
-                )
-                if resp.status_code == 200 and resp.text:
-                    cloud_text = resp.text.strip()
-                    if cloud_text and not cloud_text.startswith("An error occurred") and "404" not in cloud_text and "402" not in cloud_text:
-                        full_response += cloud_text
-                        yield cloud_text
-                        ollama_active = True
-        except Exception as e:
-            print(f"Free Cloud AI route attempt skipped: {e}. Falling back to high-capacity engine.")
+    # Route A0: Sub-Second Local AI Engine (Pre-loaded in RAM, < 0.3s Streaming Start)
+    try:
+        ollama_url = "http://localhost:11434/api/chat"
+        models_to_try = ["qwen2.5:0.5b", "llama3.2:latest"]
+        fast_messages = ollama_messages[:1] + ollama_messages[-3:] if len(ollama_messages) > 4 else ollama_messages
 
-    # Route A: Google Gemini 2.0 Flash / 1.5 Flash High-Speed Streaming
+        for o_model in models_to_try:
+            if ollama_active:
+                break
+            payload = {
+                "model": o_model,
+                "messages": fast_messages,
+                "stream": True,
+                "keep_alive": -1,
+                "options": {
+                    "num_ctx": 384,
+                    "num_predict": 140,
+                    "num_thread": 8,
+                    "temperature": 0.5,
+                    "top_p": 0.9,
+                }
+            }
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=0.5)) as o_client:
+                    async with o_client.stream("POST", ollama_url, json=payload) as response:
+                        if response.status_code == 200:
+                            has_yielded = False
+                            async for line in response.aiter_lines():
+                                if line.strip():
+                                    try:
+                                        data = json.loads(line)
+                                        chunk = data.get("message", {}).get("content", "")
+                                        if chunk:
+                                            if not chunk.strip().startswith("[STATE:"):
+                                                full_response += chunk
+                                            yield chunk
+                                            has_yielded = True
+                                    except Exception:
+                                        continue
+                            if has_yielded:
+                                ollama_active = True
+            except Exception as e:
+                print(f"Ollama model {o_model} streaming failed: {e}")
+    except Exception as e:
+        print(f"Local engine check skipped: {e}")
+
+    # Route A: Google Gemini 2.0 Flash / 1.5 Flash High-Speed Streaming Fallback
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     gemini_key = gemini_key.strip().strip('"').strip("'")
     
