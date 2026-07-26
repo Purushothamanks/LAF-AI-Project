@@ -29,7 +29,8 @@ import {
   Menu,
   Bell,
   Smartphone,
-  User
+  User,
+  RefreshCw
 } from 'lucide-react';
 
 const API_BASE = ''; // Proxy-handled
@@ -1237,10 +1238,9 @@ export default function App() {
             }}
           >
             <img 
-              src="/laf-logo.png" 
+              src="/laf-logo.svg" 
               alt="LAF Logo" 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-              onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
             />
           </div>
           <span className="logo-name">LAF Console</span>
@@ -1297,6 +1297,33 @@ export default function App() {
         </div>
 
         <div className="sidebar-footer" style={{ flexDirection: 'column', gap: '10px' }}>
+          {/* Mobile App Only: Check for Update Button */}
+          <button 
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/version');
+                const data = await res.json();
+                if (data && data.update_available) {
+                  setUpdateAvailable(true);
+                  alert(data.message || "🚀 New LAF AI Update Available! Click 'Update Now' in top banner to refresh.");
+                } else {
+                  alert("You are running the latest version of LAF AI!");
+                }
+              } catch (e) {
+                setUpdateAvailable(true);
+                alert("🚀 LAF AI Update Available! Refreshing app...");
+                window.location.reload(true);
+              }
+            }}
+            className="icon-action-btn mobile-only"
+            style={{ width: '100%', padding: '8px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#ec4899', background: 'rgba(236, 72, 153, 0.12)', borderRadius: '8px', border: '1px solid rgba(236, 72, 153, 0.3)', fontWeight: '600', cursor: 'pointer' }}
+            title="Check for latest app updates"
+          >
+            <RefreshCw size={13} />
+            <span>Check for update</span>
+            {updateAvailable && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ec4899' }} />}
+          </button>
+
           {chats.length > 0 && (
             <button 
               onClick={handleClearAllData} 
@@ -1314,13 +1341,12 @@ export default function App() {
               setUsernameInput(userName);
               setUsernameModalOpen(true);
             }}
-            title="Click to edit name / login as user"
+            title="Click to edit name"
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="user-avatar" style={{ position: 'relative' }}>
                 {getUserInitials(userName)}
-                {/* Update Notification Badge */}
                 {updateAvailable && (
                   <span 
                     style={{
@@ -1338,13 +1364,26 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontWeight: '600', fontSize: '13px' }}>{userName || 'Enter Name'}</span>
-                <span style={{ fontSize: '10px', color: 'var(--accent-indigo)' }}>Edit</span>
+                <span style={{ fontSize: '10px', color: 'var(--accent-indigo)' }}>Edit Name</span>
               </div>
             </div>
             <User size={15} style={{ color: 'var(--text-secondary)' }} />
           </div>
         </div>
       </div>
+
+      {/* Top Update Notification Toast Banner */}
+      {updateAvailable && (
+        <div style={{ position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)', zIndex: 10002, background: 'linear-gradient(135deg, #6366f1, #a855f7)', color: '#fff', padding: '10px 18px', borderRadius: '30px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 25px rgba(99, 102, 241, 0.5)', fontSize: '13px', fontWeight: '600' }}>
+          <span>🚀 LAF AI Update Available!</span>
+          <button 
+            onClick={() => window.location.reload(true)} 
+            style={{ background: '#ffffff', color: '#6366f1', border: 'none', padding: '4px 12px', borderRadius: '14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+          >
+            Update Now
+          </button>
+        </div>
+      )}
 
       {/* Main chat interface view */}
       <div className="main-chat-container">
@@ -1359,23 +1398,10 @@ export default function App() {
           </button>
 
           <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-            <h3>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Conversation log' : 'LAF AI'}</h3>
+            {/* Conversation log title removed per user request */}
           </div>
 
           <div className="header-right-actions">
-            {/* Mobile Direct Edit Name / User Profile Button */}
-            <button 
-              onClick={() => { setUsernameInput(userName); setUsernameModalOpen(true); }}
-              className="icon-action-btn mobile-only user-edit-mobile-btn"
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 9px', borderRadius: '18px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', cursor: 'pointer' }}
-              title="Edit Name / Profile"
-            >
-              <div className="user-avatar" style={{ width: '20px', height: '20px', fontSize: '10px', minWidth: '20px', minHeight: '20px' }}>
-                {getUserInitials(userName)}
-              </div>
-              <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)', maxWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName || 'Edit'}</span>
-            </button>
-
             <button 
               onClick={shareChat} 
               className="model-select-dropdown"
@@ -1417,14 +1443,13 @@ export default function App() {
               }}
             >
               <img 
-                src="/laf-logo.png" 
+                src="/laf-logo.svg" 
                 alt="LAF Logo" 
                 style={{ 
                   width: '100%', 
                   height: '100%', 
                   objectFit: 'cover'
                 }} 
-                onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
               />
             </div>
             <h2 className="welcome-heading">LAF Welcomes you - {userName}</h2>
@@ -1445,7 +1470,7 @@ export default function App() {
                   {msg.role === 'user' ? (
                     getUserInitials(userName)
                   ) : (
-                    <img src="/laf-logo.png" alt="LAF Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }} />
+                    <img src="/laf-logo.svg" alt="LAF Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   )}
                 </div>
                 <div className="bubble-body-container">
@@ -1778,10 +1803,9 @@ export default function App() {
                 }}
               >
                 <img 
-                  src="/laf-logo.png" 
+                  src="/laf-logo.svg" 
                   alt="LAF Logo" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  onError={(e) => { e.target.onerror = null; e.target.src = "/laf-logo.svg"; }}
                 />
               </div>
               <div>

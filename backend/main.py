@@ -2441,6 +2441,16 @@ async def chat_endpoint(request: ChatRequest, fastapi_req: Request):
         headers={"x-chat-id": chat_id}
     )
 
+@app.get("/api/version")
+async def get_system_version():
+    """Returns current system build version for update notifications."""
+    return {
+        "version": "2.5.0",
+        "build": "2026.07.26.1042",
+        "update_available": True,
+        "message": "LAF AI v2.5.0 Update Available! Performance tuned for sub-3-second responses and refreshed mobile UI."
+    }
+
 # Static files configuration
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "out")
 
