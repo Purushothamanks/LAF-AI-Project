@@ -54,10 +54,9 @@ def get_db_connection():
     """
     Establish connection to SQLite database with thread safety and WAL configurations.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
     except sqlite3.OperationalError:
         pass
@@ -68,6 +67,10 @@ def init_db():
     Initialize SQLite tables for chats and messages.
     """
     with get_db_connection() as conn:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+        except sqlite3.OperationalError:
+            pass
         cursor = conn.cursor()
         
         # Create chats table
