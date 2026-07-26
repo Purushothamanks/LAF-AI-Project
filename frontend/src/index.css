@@ -127,12 +127,14 @@ body {
   }
 
   .main-chat-header {
-    padding: 0 8px;
-    height: 52px;
-    min-height: 52px;
-    gap: 6px;
+    padding: 0 12px;
+    height: 54px;
+    min-height: 54px;
+    gap: 8px;
     flex-wrap: nowrap;
     justify-content: space-between;
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
   }
 
   .corner-menu-btn {
@@ -146,25 +148,30 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
   }
 
   .header-title-section {
     min-width: 0;
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .header-title-section h3 {
-    font-size: 13px;
-    max-width: 130px;
+    font-size: 14px;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-primary);
   }
   
   .header-right-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
   }
   
@@ -173,6 +180,12 @@ body {
     padding: 5px 8px;
     white-space: nowrap;
     border-radius: 8px;
+  }
+
+  @media (max-width: 480px) {
+    .header-btn-text {
+      display: none !important;
+    }
   }
   
   .messages-viewport {

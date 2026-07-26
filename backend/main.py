@@ -2265,18 +2265,23 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             else:
                 models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
                     
+            # Ultra-fast message context trimming for CPU speed (System prompt + last 4 turns)
+            fast_messages = ollama_messages[:1] + ollama_messages[-4:] if len(ollama_messages) > 5 else ollama_messages
+
             for o_model in models_to_try:
                 if ollama_active:
                     break
                 payload = {
                     "model": o_model,
-                    "messages": ollama_messages,
+                    "messages": fast_messages,
                     "stream": True,
                     "options": {
-                        "num_ctx": 2048,
-                        "num_predict": 512,
+                        "num_ctx": 1024,
+                        "num_predict": 256,
+                        "num_thread": 4,
                         "temperature": 0.7,
-                        "top_p": 0.9
+                        "top_p": 0.9,
+                        "low_vram": True
                     }
                 }
                 try:
