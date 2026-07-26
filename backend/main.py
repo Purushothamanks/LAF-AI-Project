@@ -2259,11 +2259,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             if "data:image" in prompt or "/image" in prompt or "/video" in prompt:
                 models_to_try = ["llama3.2-vision:latest", "llava:latest", "llama3.2:latest"]
             elif any(w in prompt_lower for w in ["code", "python", "javascript", "react", "html", "css", "function", "class", "algorithm", "debug", "error", "script", "def ", "import ", "const ", "var "]):
-                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
-            elif len(prompt) < 120 or any(w in prompt_lower for w in ["hi", "hello", "hey", "who are you", "what is", "how to", "thanks", "thank you", "math", "calculate"]):
-                models_to_try = ["phi3:mini", "llama3.2:latest", "llama3:latest"]
+                models_to_try = ["llama3.2:latest", "qwen2.5:0.5b", "phi3:mini"]
             else:
-                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
+                models_to_try = ["qwen2.5:0.5b", "llama3.2:latest", "phi3:mini"]
                     
             # Ultra-fast message context trimming for CPU speed (System prompt + last 4 turns)
             fast_messages = ollama_messages[:1] + ollama_messages[-4:] if len(ollama_messages) > 5 else ollama_messages
@@ -2275,8 +2273,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     "model": o_model,
                     "messages": fast_messages,
                     "stream": True,
+                    "keep_alive": -1,
                     "options": {
-                        "num_ctx": 1024,
+                        "num_ctx": 512,
                         "num_predict": 256,
                         "num_thread": 4,
                         "temperature": 0.7,
