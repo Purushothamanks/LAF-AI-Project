@@ -2176,22 +2176,25 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     ollama_active = False
     full_response = file_prefix
 
-    # Route A0: Free High-Speed Cloud AI Streaming (100% Free, Sub-Second, Highly Accurate 70B AI)
+    # Route A0: Free High-Speed Cloud AI Streaming (100% Free, Sub-Second Latency)
     if not ollama_active:
         try:
             cloud_messages = [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
             ]
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.0)) as cloud_client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Content-Type": "application/json"
+            }
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.0), headers=headers) as cloud_client:
                 resp = await cloud_client.post(
                     "https://text.pollinations.ai/openai",
                     json={"messages": cloud_messages, "model": "openai"},
-                    headers={"Content-Type": "application/json"}
                 )
                 if resp.status_code == 200 and resp.text:
                     cloud_text = resp.text.strip()
-                    if cloud_text and not cloud_text.startswith("An error occurred") and "404" not in cloud_text:
+                    if cloud_text and not cloud_text.startswith("An error occurred") and "404" not in cloud_text and "402" not in cloud_text:
                         full_response += cloud_text
                         yield cloud_text
                         ollama_active = True
@@ -2255,11 +2258,11 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 print(f"Gemini model {gem_model} stream query failed: {e}. Skipping Gemini candidate retries.")
                 break
 
-    # Route A2: Local Ollama High-Speed Streaming (Local Host / Docker host Ollama)
+    # Route A2: High-Speed Local Engine (< 1.5s First-Token Streaming)
     if not ollama_active:
         ollama_available = False
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=3.0)) as ping_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.5)) as ping_client:
                 r = await ping_client.get("http://localhost:11434/api/tags")
                 if r.status_code == 200:
                     ollama_available = True
@@ -2269,11 +2272,11 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
         if ollama_available:
             ollama_url = "http://localhost:11434/api/chat"
             
-            # Single Latest Updated Large Model (llama3.2:latest) for fast, exact accurate responses
-            models_to_try = ["llama3.2:latest"]
+            # Ultra-fast model priority (qwen2.5:0.5b for <1s instant response, fallback to llama3.2:latest)
+            models_to_try = ["qwen2.5:0.5b", "llama3.2:latest"]
                     
-            # Ultra-fast message context trimming for CPU speed (System prompt + last 4 turns)
-            fast_messages = ollama_messages[:1] + ollama_messages[-4:] if len(ollama_messages) > 5 else ollama_messages
+            # Ultra-fast message context trimming for CPU speed
+            fast_messages = ollama_messages[:1] + ollama_messages[-3:] if len(ollama_messages) > 4 else ollama_messages
 
             for o_model in models_to_try:
                 if ollama_active:
@@ -2285,9 +2288,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     "keep_alive": -1,
                     "options": {
                         "num_ctx": 512,
-                        "num_predict": 256,
-                        "num_thread": 4,
-                        "temperature": 0.7,
+                        "num_predict": 160,
+                        "num_thread": 8,
+                        "temperature": 0.6,
                         "top_p": 0.9,
                         "low_vram": True
                     }

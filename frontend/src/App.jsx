@@ -1349,19 +1349,33 @@ export default function App() {
       {/* Main chat interface view */}
       <div className="main-chat-container">
         <div className="main-chat-header">
-          <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Mobile Menu Toggle */}
-            <button 
-              className="icon-action-btn mobile-only corner-menu-btn"
-              onClick={() => setSidebarOpen(prev => !prev)}
-              title="Toggle Menu"
-            >
-              <Menu size={18} />
-            </button>
+          {/* Mobile 3-Line Menu Toggle Pinned in Top-Left Corner */}
+          <button 
+            className="icon-action-btn mobile-only corner-menu-btn"
+            onClick={() => setSidebarOpen(prev => !prev)}
+            title="Toggle Menu"
+          >
+            <Menu size={20} />
+          </button>
+
+          <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
             <h3>{currentChatId ? chats.find(c => c.id === currentChatId)?.title || 'Conversation log' : 'LAF AI'}</h3>
           </div>
 
           <div className="header-right-actions">
+            {/* Mobile Direct Edit Name / User Profile Button */}
+            <button 
+              onClick={() => { setUsernameInput(userName); setUsernameModalOpen(true); }}
+              className="icon-action-btn mobile-only user-edit-mobile-btn"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 9px', borderRadius: '18px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', cursor: 'pointer' }}
+              title="Edit Name / Profile"
+            >
+              <div className="user-avatar" style={{ width: '20px', height: '20px', fontSize: '10px', minWidth: '20px', minHeight: '20px' }}>
+                {getUserInitials(userName)}
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)', maxWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName || 'Edit'}</span>
+            </button>
+
             <button 
               onClick={shareChat} 
               className="model-select-dropdown"
@@ -1739,8 +1753,16 @@ export default function App() {
       )}
       {/* Username Setup / Login Modal for New Users */}
       {usernameModalOpen && (
-        <div className="professional-modal-backdrop" style={{ zIndex: 9999 }}>
-          <div className="professional-modal" style={{ maxWidth: '420px', textAlign: 'center', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))' }}>
+        <div className="professional-modal-backdrop" style={{ zIndex: 10000, touchAction: 'manipulation' }}>
+          <div className="professional-modal" style={{ position: 'relative', maxWidth: '420px', textAlign: 'center', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))' }}>
+            <button 
+              onClick={() => setUsernameModalOpen(false)}
+              className="icon-action-btn"
+              style={{ position: 'absolute', top: '14px', right: '14px', background: 'rgba(255,255,255,0.08)', borderRadius: '50%', padding: '6px', cursor: 'pointer', border: '1px solid var(--border-color)' }}
+              title="Close"
+            >
+              <X size={16} />
+            </button>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
               <div 
                 style={{ 
