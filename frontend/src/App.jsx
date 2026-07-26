@@ -773,14 +773,14 @@ export default function App() {
   };
 
   const handleCopyAppUrl = () => {
-    const url = window.location.origin || 'http://98.89.32.42';
+    const url = window.location.origin || 'https://98.89.32.42.nip.io';
     navigator.clipboard.writeText(url);
     setCopiedShareLink(true);
     setTimeout(() => setCopiedShareLink(false), 3000);
   };
 
   const handleNativeShareApp = async () => {
-    const url = window.location.origin || 'http://98.89.32.42';
+    const url = window.location.origin || 'https://98.89.32.42.nip.io';
     if (navigator.share) {
       try {
         await navigator.share({
@@ -2086,7 +2086,7 @@ export default function App() {
                   <input
                     type="text"
                     readOnly
-                    value={window.location.origin || 'http://98.89.32.42'}
+                    value={window.location.origin || 'https://98.89.32.42.nip.io'}
                     className="modal-text-input"
                     style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12.5px', color: 'var(--accent-indigo)', fontWeight: '600' }}
                   />
