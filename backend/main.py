@@ -1380,14 +1380,7 @@ def get_intelligent_response(prompt: str, user_name: str = "") -> str:
         )
 
     # 11. Dynamic response for general queries
-    return (
-        f"Hello! I am **LAF AI**, your conversational assistant. 😊✨\n\n"
-        f"Regarding *\"{prompt.strip()}\"*:\n"
-        f"LAF AI is ready to help you analyze, code, and solve problems on this topic.\n\n"
-        f"You can also ask me to write or execute code, search the live web (`/search`), "
-        f"generate artwork (`/image`), create video (`/video`), or analyze files!\n\n"
-        f"How can I assist you further?"
-    )
+    return ""
 
 def clean_media_subject(prompt: str) -> str:
     """
@@ -2276,14 +2269,8 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
         if ollama_available:
             ollama_url = "http://localhost:11434/api/chat"
             
-            # Dynamic Smart Model Router based on Question Intent
-            prompt_lower = prompt.lower()
-            if "data:image" in prompt or "/image" in prompt or "/video" in prompt:
-                models_to_try = ["llama3.2-vision:latest", "llava:latest", "llama3.2:latest"]
-            elif any(w in prompt_lower for w in ["code", "python", "javascript", "react", "html", "css", "function", "class", "algorithm", "debug", "error", "script", "def ", "import ", "const ", "var "]):
-                models_to_try = ["llama3.2:latest", "llama3:latest", "phi3:mini"]
-            else:
-                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
+            # Single Latest Updated Large Model (llama3.2:latest) for fast, exact accurate responses
+            models_to_try = ["llama3.2:latest"]
                     
             # Ultra-fast message context trimming for CPU speed (System prompt + last 4 turns)
             fast_messages = ollama_messages[:1] + ollama_messages[-4:] if len(ollama_messages) > 5 else ollama_messages
