@@ -1380,15 +1380,6 @@ export default function App() {
               <Code size={14} />
               <span className="header-btn-text">Code_It</span>
             </button>
-
-            <span 
-              className="model-select-dropdown"
-              style={{ fontWeight: '600', color: 'var(--accent-indigo)', cursor: 'default', display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="LAF Intelligent Intent Router Active"
-            >
-              <Cpu size={14} />
-              <span>Auto-Router</span>
-            </span>
           </div>
         </div>
 

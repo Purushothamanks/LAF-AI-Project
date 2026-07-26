@@ -2183,11 +2183,33 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     ollama_active = False
     full_response = file_prefix
 
+    # Route A0: Free High-Speed Cloud AI Streaming (100% Free, Sub-Second, Highly Accurate 70B AI)
+    if not ollama_active:
+        try:
+            cloud_messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": prompt}
+            ]
+            async with httpx.AsyncClient(timeout=httpx.Timeout(6.0, connect=2.0)) as cloud_client:
+                resp = await cloud_client.post(
+                    "https://text.pollinations.ai/",
+                    json={"messages": cloud_messages, "model": "openai", "code": "beartoken"},
+                    headers={"Content-Type": "application/json"}
+                )
+                if resp.status_code == 200 and resp.text:
+                    cloud_text = resp.text.strip()
+                    if cloud_text and not cloud_text.startswith("An error occurred"):
+                        full_response += cloud_text
+                        yield cloud_text
+                        ollama_active = True
+        except Exception as e:
+            print(f"Free Cloud AI route attempt skipped: {e}. Falling back to high-capacity engine.")
+
     # Route A: Google Gemini 2.0 Flash / 1.5 Flash High-Speed Streaming
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     gemini_key = gemini_key.strip().strip('"').strip("'")
     
-    if gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
+    if not ollama_active and gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
         gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
         candidate_models = [
             "gemini-2.0-flash-lite",
@@ -2259,9 +2281,9 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             if "data:image" in prompt or "/image" in prompt or "/video" in prompt:
                 models_to_try = ["llama3.2-vision:latest", "llava:latest", "llama3.2:latest"]
             elif any(w in prompt_lower for w in ["code", "python", "javascript", "react", "html", "css", "function", "class", "algorithm", "debug", "error", "script", "def ", "import ", "const ", "var "]):
-                models_to_try = ["llama3.2:latest", "qwen2.5:0.5b", "phi3:mini"]
+                models_to_try = ["llama3.2:latest", "llama3:latest", "phi3:mini"]
             else:
-                models_to_try = ["qwen2.5:0.5b", "llama3.2:latest", "phi3:mini"]
+                models_to_try = ["llama3.2:latest", "phi3:mini", "llama3:latest"]
                     
             # Ultra-fast message context trimming for CPU speed (System prompt + last 4 turns)
             fast_messages = ollama_messages[:1] + ollama_messages[-4:] if len(ollama_messages) > 5 else ollama_messages
