@@ -2190,15 +2190,15 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
             ]
-            async with httpx.AsyncClient(timeout=httpx.Timeout(6.0, connect=2.0)) as cloud_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.0)) as cloud_client:
                 resp = await cloud_client.post(
-                    "https://text.pollinations.ai/",
-                    json={"messages": cloud_messages, "model": "openai", "code": "beartoken"},
+                    "https://text.pollinations.ai/openai",
+                    json={"messages": cloud_messages, "model": "openai"},
                     headers={"Content-Type": "application/json"}
                 )
                 if resp.status_code == 200 and resp.text:
                     cloud_text = resp.text.strip()
-                    if cloud_text and not cloud_text.startswith("An error occurred"):
+                    if cloud_text and not cloud_text.startswith("An error occurred") and "404" not in cloud_text:
                         full_response += cloud_text
                         yield cloud_text
                         ollama_active = True
