@@ -357,13 +357,23 @@ def get_global_memory_context(current_chat_id: str, query_prompt: str = None, li
         print(f"Memory retrieval failed: {e}")
         return ""
 
+_kb_cache = {}
+
 def search_ai_model_knowledge(query_prompt: str, limit: int = 4) -> str:
     """
     Searches the ingested trained AI models knowledge base and domain datasets 
     for relevant grounding context to maximize LAF AI response accuracy.
+    Cached for high performance.
     """
     if not query_prompt:
         return ""
+        
+    query_clean = query_prompt.strip().lower()
+    if query_clean in ["hi", "hello", "hey", "who are you", "what is your name", "who developed you"]:
+        return ""
+
+    if query_clean in _kb_cache:
+        return _kb_cache[query_clean]
         
     try:
         query_words = [w.lower() for w in re.findall(r'\b\w{3,}\b', query_prompt)]
@@ -372,8 +382,15 @@ def search_ai_model_knowledge(query_prompt: str, limit: int = 4) -> str:
             
         context_blocks = []
         with get_db_connection() as conn:
-            # 1. Search Trained Datasets
-            ds_rows = conn.execute("SELECT dataset_name, domain, content FROM trained_datasets").fetchall()
+            # 1. Search Trained Datasets with SQL LIKE filter for speed
+            like_clauses = " OR ".join(["dataset_name LIKE ? OR domain LIKE ?" for _ in query_words[:3]])
+            params = []
+            for w in query_words[:3]:
+                params.extend([f"%{w}%", f"%{w}%"])
+            
+            sql = f"SELECT dataset_name, domain, content FROM trained_datasets WHERE {like_clauses} LIMIT 20"
+            ds_rows = conn.execute(sql, params).fetchall()
+            
             matched_ds = []
             for row in ds_rows:
                 score = sum(1 for w in query_words if w in row["dataset_name"].lower() or w in row["domain"].lower() or w in row["content"].lower())
@@ -387,7 +404,7 @@ def search_ai_model_knowledge(query_prompt: str, limit: int = 4) -> str:
                 )
 
             # 2. Search AI Model Knowledge Definitions if model/ai query
-            if any(k in query_prompt.lower() for k in ["model", "ai", "llm", "gpt", "claude", "gemini", "llama", "ollama", "mistral", "qwen", "deepseek", "accuracy"]):
+            if any(k in query_clean for k in ["model", "ai", "llm", "gpt", "claude", "gemini", "llama", "ollama", "mistral", "qwen", "deepseek", "accuracy"]):
                 mod_rows = conn.execute("SELECT model_name, provider, description, capabilities, trained_data_snippet FROM ai_model_knowledge").fetchall()
                 matched_mods = []
                 for row in mod_rows:
@@ -402,9 +419,15 @@ def search_ai_model_knowledge(query_prompt: str, limit: int = 4) -> str:
                         f"Capabilities: {mod['capabilities']} | {mod['trained_data_snippet']}"
                     )
 
+        result = ""
         if context_blocks:
-            return "\n\n[COLLECTED TRAINED AI DATASETS & MODEL KNOWLEDGE]\n" + "\n---\n".join(context_blocks) + "\n[END OF TRAINED DATASET CONTEXT]\n"
-        return ""
+            result = "\n\n[COLLECTED TRAINED AI DATASETS & MODEL KNOWLEDGE]\n" + "\n---\n".join(context_blocks) + "\n[END OF TRAINED DATASET CONTEXT]\n"
+        
+        # Cache up to 100 queries
+        if len(_kb_cache) > 100:
+            _kb_cache.clear()
+        _kb_cache[query_clean] = result
+        return result
     except Exception as e:
         print(f"Error searching AI model knowledge: {e}")
         return ""

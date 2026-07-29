@@ -131,6 +131,32 @@ def explain_file_content(filename: str, content: str) -> str:
         
     return explanation
 
+_shared_client = None
+_ollama_status_cache = {"available": False, "last_check": 0}
+
+def get_shared_client():
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        limits = httpx.Limits(max_keepalive_connections=30, max_connections=100)
+        timeout = httpx.Timeout(15.0, connect=2.0)
+        _shared_client = httpx.AsyncClient(limits=limits, timeout=timeout)
+    return _shared_client
+
+async def check_ollama_available():
+    import time
+    now = time.time()
+    if now - _ollama_status_cache["last_check"] < 15:
+        return _ollama_status_cache["available"]
+    
+    _ollama_status_cache["last_check"] = now
+    try:
+        client = get_shared_client()
+        r = await client.get("http://localhost:11434/api/tags", timeout=httpx.Timeout(0.2, connect=0.1))
+        _ollama_status_cache["available"] = (r.status_code == 200)
+    except Exception:
+        _ollama_status_cache["available"] = False
+    return _ollama_status_cache["available"]
+
 app = FastAPI(title="LAF API", version="1.0.0")
 
 # Enable CORS for local development when running Next.js dev server separately
@@ -1422,11 +1448,16 @@ def clean_media_subject(prompt: str) -> str:
     # Clean quotes and punctuation
     return subject.strip('"\'()[]{}.,! ')
 
+_codebase_file_cache = {}
+_codebase_cache_time = 0
+
 def get_codebase_context(query: str) -> str:
     """
     Search local project files for query terms and return relevant context.
-    This acts as the 'LAF Trained Data' context.
+    Acts as 'LAF Trained Data' context, cached in memory for sub-second retrieval.
     """
+    global _codebase_file_cache, _codebase_cache_time
+    import time
     query_lower = query.lower().strip()
     if query_lower in ["hi", "hi laf", "hello", "hello laf", "hey", "hey laf", "hi!", "hello!", "hey!"]:
         return ""
@@ -1460,6 +1491,20 @@ def get_codebase_context(query: str) -> str:
         "frontend/store/useChatStore.js"
     ]
     
+    # Reload file cache if older than 60s
+    now = time.time()
+    if not _codebase_file_cache or (now - _codebase_cache_time > 60):
+        _codebase_file_cache = {}
+        for rel_path in files_to_index:
+            full_path = os.path.join(project_dir, rel_path)
+            if os.path.exists(full_path):
+                try:
+                    with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                        _codebase_file_cache[rel_path] = f.read()
+                except Exception:
+                    pass
+        _codebase_cache_time = now
+
     context_blocks = []
     
     # We want to match words from the query
@@ -1467,15 +1512,8 @@ def get_codebase_context(query: str) -> str:
     if not words:
         words = ["laf"] # fallback
         
-    for rel_path in files_to_index:
-        full_path = os.path.join(project_dir, rel_path)
-        if not os.path.exists(full_path):
-            continue
-            
+    for rel_path, content in _codebase_file_cache.items():
         try:
-            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-                
             # If it's a log or agents markdown, we can search paragraph by paragraph or section by section
             if rel_path.endswith(".md"):
                 # Split by headers
@@ -1486,10 +1524,8 @@ def get_codebase_context(query: str) -> str:
                     if match_count > 0:
                         context_blocks.append((match_count, f"File: {rel_path}\nSection Content:\n{sec.strip()}"))
             else:
-                # For code files, if the query mentions specific terms (like function/variable names or keywords)
-                # search for matching line ranges
+                # For code files, search for matching line ranges
                 lines = content.splitlines()
-                # find matching lines
                 matching_lines = []
                 for i, line in enumerate(lines):
                     line_lower = line.lower()
@@ -2176,15 +2212,8 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     ollama_active = False
     full_response = file_prefix
 
-    # Fast ping check to see if local Ollama daemon is reachable before attempting streams
-    ollama_available = False
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(0.3, connect=0.2)) as ping_client:
-            r = await ping_client.get("http://localhost:11434/api/tags")
-            if r.status_code == 200:
-                ollama_available = True
-    except Exception:
-        ollama_available = False
+    # Fast cached ping check to see if local Ollama daemon is reachable
+    ollama_available = await check_ollama_available()
 
     # Route A0: Sub-Second Local AI Engine (Only if Ollama daemon is active)
     if ollama_available:
@@ -2193,6 +2222,7 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
             models_to_try = ["qwen2.5:0.5b", "llama3.2:latest"]
             fast_messages = ollama_messages[:1] + ollama_messages[-3:] if len(ollama_messages) > 4 else ollama_messages
 
+            client = get_shared_client()
             for o_model in models_to_try:
                 if ollama_active:
                     break
@@ -2210,24 +2240,23 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                     }
                 }
                 try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=1.0)) as o_client:
-                        async with o_client.stream("POST", ollama_url, json=payload) as response:
-                            if response.status_code == 200:
-                                has_yielded = False
-                                async for line in response.aiter_lines():
-                                    if line.strip():
-                                        try:
-                                            data = json.loads(line)
-                                            chunk = data.get("message", {}).get("content", "")
-                                            if chunk:
-                                                if not chunk.strip().startswith("[STATE:"):
-                                                    full_response += chunk
-                                                yield chunk
-                                                has_yielded = True
-                                        except Exception:
-                                            continue
-                                if has_yielded:
-                                    ollama_active = True
+                    async with client.stream("POST", ollama_url, json=payload, timeout=httpx.Timeout(5.0, connect=0.5)) as response:
+                        if response.status_code == 200:
+                            has_yielded = False
+                            async for line in response.aiter_lines():
+                                if line.strip():
+                                    try:
+                                        data = json.loads(line)
+                                        chunk = data.get("message", {}).get("content", "")
+                                        if chunk:
+                                            if not chunk.strip().startswith("[STATE:"):
+                                                full_response += chunk
+                                            yield chunk
+                                            has_yielded = True
+                                    except Exception:
+                                        continue
+                            if has_yielded:
+                                ollama_active = True
                 except Exception as e:
                     print(f"Ollama model {o_model} streaming failed: {e}")
         except Exception as e:
@@ -2240,10 +2269,11 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
     if not ollama_active and gemini_key and gemini_key.startswith("AIzaSy") and len(gemini_key) >= 30:
         gemini_contents, gemini_system = convert_to_gemini_format(ollama_messages, system_content)
         candidate_models = [
-            "gemini-2.0-flash-lite",
             "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-1.5-flash",
+            "gemini-2.0-flash-lite"
         ]
+        client = get_shared_client()
         for gem_model in candidate_models:
             if ollama_active:
                 break
@@ -2258,37 +2288,75 @@ async def query_ollama_stream(chat_id: str, prompt: str, model: str = "laf-cloud
                 }
             }
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=2.0)) as fast_client:
-                    async with fast_client.stream("POST", url, json=payload) as response:
-                        if response.status_code == 200:
-                            has_yielded = False
-                            async for line in response.aiter_lines():
-                                if line.strip() and line.startswith("data: "):
-                                    data_str = line[6:].strip()
-                                    try:
-                                        data = json.loads(data_str)
-                                        candidates = data.get("candidates", [])
-                                        if candidates:
-                                            parts = candidates[0].get("content", {}).get("parts", [])
-                                            if parts:
-                                                chunk = parts[0].get("text", "")
-                                                if chunk:
-                                                    if not chunk.strip().startswith("[STATE:"):
-                                                        full_response += chunk
-                                                    yield chunk
-                                                    has_yielded = True
-                                    except Exception:
-                                        continue
-                            if has_yielded:
-                                ollama_active = True
-                        elif response.status_code in (400, 401, 403, 429):
-                            print(f"Gemini API model {gem_model} returned {response.status_code} (Quota/Auth error). Stopping Gemini retries.")
-                            break
-                        else:
-                            print(f"Gemini model {gem_model} status: {response.status_code}")
+                async with client.stream("POST", url, json=payload, timeout=httpx.Timeout(12.0, connect=1.5)) as response:
+                    if response.status_code == 200:
+                        has_yielded = False
+                        async for line in response.aiter_lines():
+                            if line.strip() and line.startswith("data: "):
+                                data_str = line[6:].strip()
+                                try:
+                                    data = json.loads(data_str)
+                                    candidates = data.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        if parts:
+                                            chunk = parts[0].get("text", "")
+                                            if chunk:
+                                                if not chunk.strip().startswith("[STATE:"):
+                                                    full_response += chunk
+                                                yield chunk
+                                                has_yielded = True
+                                except Exception:
+                                    continue
+                        if has_yielded:
+                            ollama_active = True
+                    elif response.status_code in (400, 401, 403, 429):
+                        print(f"Gemini API model {gem_model} returned {response.status_code} (Quota/Auth error). Trying next candidate.")
+                        continue
+                    else:
+                        print(f"Gemini model {gem_model} status: {response.status_code}")
             except Exception as e:
-                print(f"Gemini model {gem_model} stream query failed: {e}. Skipping Gemini candidate retries.")
+                print(f"Gemini model {gem_model} stream query failed: {e}. Trying next candidate model...")
+                continue
+
+    # Route A1: High-Speed Free Cloud AI Streaming Engine (Pollinations AI)
+    if not ollama_active:
+        pollination_models = ["openai", "qwen-coder", "mistral"]
+        client = get_shared_client()
+        for p_model in pollination_models:
+            if ollama_active:
                 break
+            p_url = "https://text.pollinations.ai/openai/chat/completions"
+            p_payload = {
+                "messages": ollama_messages,
+                "model": p_model,
+                "stream": True,
+                "temperature": 0.3
+            }
+            try:
+                async with client.stream("POST", p_url, json=p_payload, timeout=httpx.Timeout(10.0, connect=2.0)) as response:
+                    if response.status_code == 200:
+                        has_yielded = False
+                        async for line in response.aiter_lines():
+                            if line.strip().startswith("data:"):
+                                data_str = line[5:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    chunk = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                    if chunk:
+                                        if not chunk.strip().startswith("[STATE:"):
+                                            full_response += chunk
+                                        yield chunk
+                                        has_yielded = True
+                                except Exception:
+                                    continue
+                        if has_yielded:
+                            ollama_active = True
+            except Exception as e:
+                print(f"Pollinations model {p_model} stream query failed: {e}")
+                continue
 
     # Route B: Sub-Second Zero-Latency Intelligence Reasoning Engine (Instant response < 10ms)
     if not ollama_active:
