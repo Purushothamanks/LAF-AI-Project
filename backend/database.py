@@ -135,17 +135,24 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dataset_domain ON trained_datasets (domain)")
         conn.commit()
 
-def create_chat(title="New Chat", device_id="global") -> str:
+def create_chat(title: str = "New Chat", device_id: str = "global") -> str:
     """
     Creates a new chat session and returns its ID.
     """
     chat_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
     with get_db_connection() as conn:
-        conn.execute(
-            "INSERT INTO chats (id, title, created_at, device_id) VALUES (?, ?, ?, ?)",
-            (chat_id, title, created_at, device_id)
-        )
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(chats)").fetchall()]
+        if "updated_at" in cols:
+            conn.execute(
+                "INSERT INTO chats (id, title, created_at, updated_at, device_id) VALUES (?, ?, ?, ?, ?)",
+                (chat_id, title, created_at, created_at, device_id)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO chats (id, title, created_at, device_id) VALUES (?, ?, ?, ?)",
+                (chat_id, title, created_at, device_id)
+            )
         conn.commit()
     return chat_id
 
@@ -190,10 +197,17 @@ def add_message_to_chat(chat_id: str, role: str, content: str) -> str:
         chat_exists = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
         if not chat_exists:
             title = content[:30] + "..." if len(content) > 30 else content
-            conn.execute(
-                "INSERT INTO chats (id, title, created_at, device_id) VALUES (?, ?, ?, ?)",
-                (chat_id, title, timestamp, "global")
-            )
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(chats)").fetchall()]
+            if "updated_at" in cols:
+                conn.execute(
+                    "INSERT INTO chats (id, title, created_at, updated_at, device_id) VALUES (?, ?, ?, ?, ?)",
+                    (chat_id, title, timestamp, timestamp, "global")
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO chats (id, title, created_at, device_id) VALUES (?, ?, ?, ?)",
+                    (chat_id, title, timestamp, "global")
+                )
             conn.commit()
 
         # If this is the first user message, update the chat title to match the query (plaintext title)
